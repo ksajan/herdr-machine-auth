@@ -8,6 +8,10 @@ to an external terminal and copying the command.
 
 ![Machine auth](preview.png)
 
+Looking for the machine/space/tab quick switcher? It moved to
+[Herdr Fleet](https://github.com/ksajan/herdr-fleet). This mod is only about
+authentication.
+
 ## Why
 
 Herdr reconnects saved machines in the background, where SSH cannot ask for a
