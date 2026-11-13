@@ -26,6 +26,12 @@ that can ask.
 - When one needs attention: `Machines ● work needs login` with **Login** and
   **Copy** buttons. A machine that is merely unreachable or asleep gets
   **Retry** instead. Several machines scroll horizontally.
+- Click **Machines** (or press `Ctrl+Alt+M`) to open the full machine list: every
+  saved machine, its target, state, and **Login / Retry**, **Install key…**,
+  **Copy** and **Go** actions. Attention comes first.
+- **Install key…** is the permanent fix: it runs `ssh-copy-id` for your first
+  `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`, then logs in once. Future
+  reconnects use the key and no longer prompt.
 - **Login** / **Retry** opens a local space named `<machine> login` and runs
   `hc machine login <machine>`. The terminal stays open after the command so a
   failed login is readable.
@@ -54,8 +60,14 @@ herdr-app check ~/.config/herdr-app/mods/machine-login
 Once the gallery has indexed the repo, the short link is
 `herdr.dev/mods/ksajan/herdr-machine-login`.
 
-The app docks it at the bottom of the layout shown at install time. If you use
-several layouts, add this block to each one:
+The app docks it at the bottom of the layout shown at install time. Merge its
+keys too, or add the one line yourself:
+
+```json
+{ "global": { "ctrl-alt-m": "mod.open:machine-login" } }
+```
+
+If you use several layouts, add this block to each one:
 
 ```json
 {
@@ -83,8 +95,12 @@ button is not useful there.
 - Runs `hc machine ls --json` locally every 5 seconds. No network requests from
   the mod.
 - Runs `hc machine login <name>` in a normal terminal when you click Login.
+- The optional **Install key…** action runs `ssh-copy-id`, which reads one
+  public key (the first of `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`) and
+  appends it to the machine's `authorized_keys`. It reads no private key and
+  does not handle the password; SSH asks in the terminal.
 - Posts notifications through Herdr's `notify`.
-- Reads no files outside its own folder and stores no credentials.
+- Stores no credentials.
 
 ## Limits
 
@@ -95,10 +111,18 @@ button is not useful there.
   catalog; use `herdr machine reconnect` for those.
 - The notification action uses `space.new`, so it works with Herdr's shipped
   toast and with custom toasts that run notification actions.
-- A machine that is merely unreachable gets the same Login button. It will try
-  authentication and then show the actual SSH error in the login terminal.
+- A machine that is merely unreachable gets **Retry**. It will try
+  authentication and then show the actual SSH error in the terminal.
+- **Install key…** only appears for `needs_login` machines with a standard
+  target (`via: false`) and only uses the first of the two default public keys.
+  For a custom port, a Host alias that `ssh-copy-id` cannot parse, or a
+  different key, run `ssh-copy-id` once in your own terminal.
+- The dialog's **Go** button selects the first space on that machine. It is
+  hidden if that machine has no space on the current screen.
 - The mod quotes machine names for the `sh -c` wrapper; names from `hc` are
   already constrained, but the quoting keeps a renamed machine safe.
+- `Ctrl+Alt+M` is the default list shortcut. Change or remove it in
+  `keys.json` if it conflicts with something you use.
 
 ## Uninstall
 
@@ -108,8 +132,10 @@ Remove the block from your layouts, or delete the folder:
 rm -rf ~/.config/herdr-app/mods/machine-login
 ```
 
-Then switch layouts or restart Herdr. The saved machines and their SSH auth are
-untouched.
+Then switch layouts or restart Herdr. Remove the `ctrl-alt-m` line from
+`keys.json` too. The saved machines and their SSH auth are untouched. If you
+used **Install key…**, the public key stays in the machine's
+`~/.ssh/authorized_keys`; remove it there if you want to undo that separately.
 
 ## License
 
