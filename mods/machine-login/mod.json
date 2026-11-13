@@ -1,5 +1,6 @@
 {
   "place": "bottom",
   "size": 34,
-  "title": "Machine login"
+  "title": "Machine login",
+  "version": "0.1.0"
 }

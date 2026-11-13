@@ -36,7 +36,14 @@ that can ask.
 
 ## Install
 
-Copy the mod into the Herdr app home:
+Ask the agent in your Herdr window:
+
+```text
+Read ~/.config/herdr-app/AGENTS.md, then add this mod:
+https://github.com/ksajan/herdr-machine-login
+```
+
+Or copy it by hand:
 
 ```sh
 cp -R mods/machine-login ~/.config/herdr-app/mods/
