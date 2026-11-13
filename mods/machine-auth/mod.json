@@ -1,0 +1,11 @@
+{
+  "place": "bottom",
+  "size": 34,
+  "title": "Machine auth",
+  "version": "0.6.0",
+  "overlay": {
+    "kind": "dialog",
+    "width": 640,
+    "height": 460
+  }
+}

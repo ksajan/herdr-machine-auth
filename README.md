@@ -1,19 +1,19 @@
-# Machine login for Herdr
+# Machine auth for Herdr
 
-A slim strip for the **Herdr desktop app** that watches your saved SSH machines
-and offers a **Login** button when one needs authentication. Click it and a
-normal local terminal opens inside Herdr running `hc machine login <name>`, so
-the password or MFA prompt appears where you are already working. No more
-switching to an external terminal and copying the command.
+A slim strip for the **Herdr desktop app** that watches saved SSH machines and
+offers a **Login** button when one needs authentication. Click it and a normal
+local terminal opens inside Herdr running `hc machine login <name>`, so the
+password or MFA prompt appears where you are already working. No more switching
+to an external terminal and copying the command.
 
-![Machine login](preview.png)
+![Machine auth](preview.png)
 
 ## Why
 
 Herdr reconnects saved machines in the background, where SSH cannot ask for a
 password or a code. After sleep, a network change, or an expired MFA approval,
 the machine moves to `needs_login` and Herdr shows the CLI command. This mod puts
-the missing button next to the message.
+the missing button next to the message and offers the permanent key-based fix.
 
 It does not store credentials and does not try to answer SSH prompts itself. It
 starts the same `hc machine login` command you would run by hand, in a terminal
@@ -26,21 +26,13 @@ that can ask.
 - When one needs attention: `Machines ● work needs login` with **Login** and
   **Copy** buttons. A machine that is merely unreachable or asleep gets
   **Retry** instead. Several machines scroll horizontally.
-- Click **Machines** (or press `Ctrl+Alt+M`) to open the machine tree: every
-  saved machine, its target, state, **Login / Retry**, **Install key…**,
-  **Copy**, **Go**, and its spaces and tabs. Attention comes first.
-- Search matches machine names, targets, states, space/tab names, agent statuses
-  and agent titles. Multi-word and fuzzy queries work. Use **↑/↓** to move the
-  highlight and **Enter** to open the selected space or tab; clicking a space
-  or tab opens it too. **Esc** closes the dialog.
-- Space and tab rows show their live agent status (`working`, `blocked`, `done`,
-  `idle`) on the right, next to the tab count. The machine header shows its
-  highest status and how many spaces have it. A single tab with the same name
-  as its space is not repeated; the space row already opens it.
+- Click **Machines** (or press `Ctrl+Alt+A`) to open the machine auth dialog:
+  every saved machine, its target, state, and **Login / Retry**,
+  **Install key…**, **Copy**. Attention comes first.
 - **Install key…** is the permanent fix: it runs `ssh-copy-id` for your first
   `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`, then logs in once. Future
   reconnects use the key and no longer prompt.
-- **Login** / **Retry** opens a local space named `<machine> login` and runs
+- **Login / Retry** opens a local space named `<machine> login` and runs
   `hc machine login <machine>`. The terminal stays open after the command so a
   failed login is readable.
 - **Copy** copies `hc machine login <machine>` for use in your own terminal.
@@ -55,36 +47,36 @@ Ask the agent in your Herdr window:
 
 ```text
 Read ~/.config/herdr-app/AGENTS.md, then add this mod:
-https://github.com/ksajan/herdr-machine-login
+https://github.com/ksajan/herdr-machine-auth
 ```
 
 Or copy it by hand:
 
 ```sh
-cp -R mods/machine-login ~/.config/herdr-app/mods/
-herdr-app check ~/.config/herdr-app/mods/machine-login
+cp -R mods/machine-auth ~/.config/herdr-app/mods/
+herdr-app check ~/.config/herdr-app/mods/machine-auth
 ```
 
-Once the gallery has indexed the repo, the short link is
-`herdr.dev/mods/ksajan/herdr-machine-login`.
-
-The app docks it at the bottom of the layout shown at install time. Merge its
-keys too, or add the one line yourself:
+Merge its keys too, or add the one line yourself:
 
 ```json
-{ "global": { "ctrl-alt-m": "mod.open:machine-login" } }
+{ "global": { "ctrl-alt-a": "mod.open:machine-auth" } }
 ```
 
-If you use several layouts, add this block to each one:
+The app docks the strip at the bottom of the layout shown at install time. If
+you use several layouts, add this block to each one:
 
 ```json
 {
-  "id": "machine-login",
+  "id": "machine-auth",
   "type": "block",
   "size": { "px": 34 },
-  "content": { "mod": "machine-login" }
+  "content": { "mod": "machine-auth" }
 }
 ```
+
+Once the gallery has indexed the repo, the short link is
+`herdr.dev/mods/ksajan/herdr-machine-auth`.
 
 Requires the Herdr desktop app and `hc` (herdr-core) on `PATH`. Linux and macOS.
 On Windows, `hc machine login` has no password prompt, so this mod's Login
@@ -125,14 +117,9 @@ button is not useful there.
   target (`via: false`) and only uses the first of the two default public keys.
   For a custom port, a Host alias that `ssh-copy-id` cannot parse, or a
   different key, run `ssh-copy-id` once in your own terminal.
-- The dialog's **Go** button selects the first space on that machine. It is
-  hidden if that machine has no space on the current screen. The tree lists
-  spaces and tabs under each connected machine; search matches names, targets,
-  states, statuses and agent titles. `↑/↓` and Enter work while the search field
-  has focus.
 - The mod quotes machine names for the `sh -c` wrapper; names from `hc` are
   already constrained, but the quoting keeps a renamed machine safe.
-- `Ctrl+Alt+M` is the default list shortcut. Change or remove it in
+- `Ctrl+Alt+A` is the default auth-dialog shortcut. Change or remove it in
   `keys.json` if it conflicts with something you use.
 
 ## Uninstall
@@ -140,12 +127,12 @@ button is not useful there.
 Remove the block from your layouts, or delete the folder:
 
 ```sh
-rm -rf ~/.config/herdr-app/mods/machine-login
+rm -rf ~/.config/herdr-app/mods/machine-auth
 ```
 
-Then switch layouts or restart Herdr. Remove the `ctrl-alt-m` line from
-`keys.json` too. The saved machines and their SSH auth are untouched. If you
-used **Install key…**, the public key stays in the machine's
+Then switch layouts or restart Herdr. Remove the `ctrl-alt-a` line from
+`keys.json` too. Saved machines and their SSH auth are untouched. If you used
+**Install key…**, the public key stays in the machine's
 `~/.ssh/authorized_keys`; remove it there if you want to undo that separately.
 
 ## License
