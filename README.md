@@ -24,8 +24,9 @@ that can ask.
 - Adds a 34px **Machines** strip at the bottom of the layout.
 - When everything is connected: `Machines ● N connected`.
 - When one needs attention: `Machines ● work needs login` with **Login** and
-  **Copy** buttons. Several machines scroll horizontally.
-- **Login** opens a local space named `<machine> login` and runs
+  **Copy** buttons. A machine that is merely unreachable or asleep gets
+  **Retry** instead. Several machines scroll horizontally.
+- **Login** / **Retry** opens a local space named `<machine> login` and runs
   `hc machine login <machine>`. The terminal stays open after the command so a
   failed login is readable.
 - **Copy** copies `hc machine login <machine>` for use in your own terminal.

@@ -23,8 +23,11 @@ From left to right:
   `needs_login`, `dim` otherwise), the machine name in `foreground` (up to
   140px, truncated), the state in 11px (`blocked` for `needs_login`, otherwise
   `dim`), a **Login** button, a **Copy** button and a 1×16px `border` divider.
-  - Login: 24px high, 8px horizontal padding, radius 5, `solid` background,
-    `solid_foreground` text, 11px medium. Hover dims it to 0.88.
+  - Login / Retry: 24px high, 8px horizontal padding, radius 5, `solid`
+    background, `solid_foreground` text, 11px medium. It reads `Login` for
+    `needs_login` and `Retry` for every other non-connected state. Hover dims it
+    to 0.88; its tooltip names the target, state, `why` when `hc` gives one, and
+    the exact command.
   - Copy: same size, radius 5, `raised` background, `foreground` text. After a
     copy it reads `Copied` until another copy.
 - A refresh button at the far right: 24×24px, radius 5, `↻`, `hover`
@@ -41,8 +44,9 @@ the running mod reads the real `hc machine ls`.
   init. The refresh button starts another read immediately.
 - Temporary machines (`temporary: true`) are left out.
 - Every machine whose state is not `connected` gets a row. That includes
-  `needs_login`, `unreachable`, `asleep` and unknown states. **Login** always
-  tries `hc machine login`; the login terminal shows the real SSH error if the
+  `needs_login`, `unreachable`, `asleep` and unknown states. The button reads
+  **Login** for `needs_login` and **Retry** otherwise; both run the same
+  `hc machine login`, and the login terminal shows the real SSH error if the
   problem was not authentication.
 - When a machine enters `needs_login`, it posts one notification:
   title `<name> needs a login`, body `Click here to log in in a terminal.`,
@@ -50,8 +54,9 @@ the running mod reads the real `hc machine ls`.
   is an ordinary app command, so Herdr's shipped toast and any custom toast that
   runs actions can use it. While the machine stays in `needs_login`, the notice
   repeats after 10 minutes; when it leaves that state the record is cleared.
-- **Login** calls `run("space.new", ...)` to make a **local** space (machine
-  `""`) named `<machine> login`, with a tab named `login`. Its command is:
+- **Login / Retry** calls `run("space.new", ...)` to make a **local** space
+  (machine `""`) named `<machine> login`, with a tab named `login`. Its command
+  is:
 
   ```sh
   hc machine login <machine>; code=$?; printf '\nLogin exited %s. Press Enter to close.\n' "$code"; read _

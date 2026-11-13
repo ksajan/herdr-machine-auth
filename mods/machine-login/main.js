@@ -76,6 +76,7 @@ export default class MachineLogin extends View {
   row(m, t) {
     const state = String(m.state ?? "unknown").replace(/_/g, " ");
     const login = m.state === "needs_login";
+    const reason = m.why ? ` (${m.why})` : "";
     const command = commandFor(m.name);
     return h_flex().flex_none().gap(6).items_center()
       .child(div().size(6).rounded(3).flex_none().bg(login ? t.blocked : t.dim))
@@ -84,9 +85,9 @@ export default class MachineLogin extends View {
       .child(div().id(`machine-login-${m.name}`).flex_none().h(24).px(8).flex().items_center().rounded(5)
         .bg(t.solid).text_color(t.solid_foreground).text_size(11).font_medium()
         .cursor_pointer().hover((s) => s.opacity(0.88))
-        .tooltip(`${m.target ?? m.name} is ${state}. Opens a terminal here and runs ${command}.`)
+        .tooltip(`${m.target ?? m.name} is ${state}${reason}. Opens a terminal here and runs ${command}.`)
         .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", loginArgs(m.name)); })
-        .child("Login"))
+        .child(login ? "Login" : "Retry"))
       .child(div().id(`machine-login-copy-${m.name}`).flex_none().h(24).px(6).flex().items_center().rounded(5)
         .bg(t.raised).text_color(t.foreground).text_size(11).cursor_pointer().hover((s) => s.bg(t.hover))
         .tooltip(command)
