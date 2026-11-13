@@ -37,36 +37,34 @@ From left to right:
 - If the check fails, the middle is one truncated line in `blocked`:
   `Couldn't check machines: <error>`; its tooltip has the full error.
 
-Clicking **Machines** (or pressing `Ctrl+Alt+M`) opens a 680×560 dialog on
+Clicking **Machines** (or pressing `Ctrl+Alt+M`) opens a 760×620 dialog on
 `popover`:
 
-- Header: **Machines** 16px semibold in `foreground`; `${connected} connected`
+- Header: **Machines** 17px semibold in `foreground`; `${connected} connected`
   and `${attention} need attention` in 12px `dim` when there is attention;
   a 24×24px refresh `↻`; a 24×24px `×` that closes the dialog.
-- A 36px search field under the header: `accent` border, radius 9,
+- A 38px search field under the header: `accent` border, radius 9,
   `background` fill, a 15px `workspace-chrome/search.svg` in `dim`, and an
-  auto-focused `Input` with placeholder `Search machines or spaces…`.
-- A scrollable column of machine cards, attention first and connected after.
-  Each card is an 11px-padded `surface` rounded 8 with a `border`, and:
-  - a 7px state dot (`blocked` for `needs_login`, `ansi2` for connected,
-    `dim` otherwise), the name 13px medium in `foreground`, the state 11px in
-    `blocked` for `needs_login` else `dim`;
-  - a 11px `dim` target line, with the `why` reason appended when `hc` gives
-    one;
-  - actions at the right: **Go** (only when the machine has a space on this
-    screen), **Login** for `needs_login` / **Retry** otherwise (not shown for
-    connected), **Install key…** (only `needs_login`, a target, and
-    `via: false`), and **Copy**.
-  - a list of the machine's spaces under the actions when it is connected:
-    26px rows, a 5px status dot (`blocked`, `working`, `done`, `idle`, or
-    `dim`), the space name in `muted` (`foreground` when active), and
-    `${tabs} tab(s)` in 10.5px `dim`. Clicking a row closes the dialog and
-    selects that space. With no spaces: `No spaces on this screen.`
+  auto-focused `Input` with placeholder `Search machines, spaces or tabs…`.
+- A scrollable tree, attention first and connected after. Each machine is a
+  9px-padded `surface` rounded 8 with a `border`:
+  - Header row: a 7px state dot (`blocked` for `needs_login`, `ansi2` for
+    connected, `dim` otherwise), name 13px medium in `foreground`, state 11px
+    (`blocked` for `needs_login` else `dim`), the target in 11px `dim` (with
+    `why` when `hc` gives one), the space count in 10.5px `dim`, then **Go**
+    (first space), **Login** / **Retry**, **Install key…** and **Copy**.
+  - Space rows: 30px high, 10px left padding, a 5px status dot, the name 12.5px
+    (`muted`, or `foreground` when active), and `${tabs} tab(s)` in 10.5px
+    `dim`.
+  - Tab rows: 26px high, 28px left padding, a 4px status dot, the tab name
+    12px (`dim`, or `foreground` when selected), and `shown` for the active tab.
+  - The highlighted row uses `selected`; the hovered row uses `hover`. Clicking
+    a space row calls `space.select`; clicking a tab row calls `tab.select`.
+    With no spaces: `No spaces on this screen.` or `Log in to see its spaces.`
   - Buttons are 26px high, radius 5. Primary is `solid`/`solid_foreground`,
     secondary `raised`/`foreground`; hover dims primary or uses `hover`.
-- Footer, 11px `dim`: `Login opens hc machine login in a local terminal.
-  Install key reads only public keys and writes authorized_keys; no credentials
-  are stored.`
+- Footer, 10.5px `dim`: `↑↓ select · Enter open · Esc close` on the left and
+  `Login opens hc machine login in a local terminal.` on the right.
 
 The preview uses synthetic `build-box`, `build-01` and `gpu-box` machines; the
 running mod reads the real `hc machine ls`.
@@ -78,21 +76,25 @@ running mod reads the real `hc machine ls`.
   an open dialog copy each poll; the dialog copy does not post notifications.
 - Temporary machines (`temporary: true`) are left out.
 - **Machines** in the strip opens the dialog with `openOverlay({ mod:
-  "machine-login", kind: "dialog", width: 680, height: 560 })`. The mod's
+  "machine-login", kind: "dialog", width: 760, height: 620 })`. The mod's
   `keys.json` binds `ctrl-alt-m` to `mod.open:machine-login`, so the same dialog
-  opens from a key. `mod.json` carries the same 680×560 dialog as its default
+  opens from a key. `mod.json` carries the same 760×620 dialog as its default
   overlay.
-- The search field is a `gpui-base` `InputState` with `on("change")` and
-  `on("submit")`. `filter` is lowercased; `matches(m, q)` accepts a machine
-  whose name, target or state contains `q`, or whose spaces include one whose
-  name contains `q`. `rows()` filters attention first, then connected.
-  **Enter** calls `openFirst`: for the first matching machine it takes the
-  first space whose name contains `q`, else that machine's first space, closes
-  the dialog and calls `space.select`. Typing with no matching space leaves the
-  dialog open.
-- A machine card lists its spaces only when it is connected, via `spaceRows`.
-  Each space row closes the dialog and calls `space.select` with that space id.
-  **Go** is the same action with the machine's first space; it is hidden when
+- `buildView()` filters the tree. It lowercases `filter`; a machine matches by
+  name, target or state; a space matches by name; a tab matches by name. A
+  machine match keeps all its spaces and tabs; a space match keeps its tabs; a
+  tab match keeps the parent machine and space. Attention machines come first.
+- `pickable()` flattens the tree to space and tab rows for the keyboard.
+  `renderList` starts at the active tab (or active space) and clamps `at`.
+  `↑`/`↓` move `at` with wraparound; the root's `on_key_down` stops propagation
+  so the focused `Input` does not also move its cursor. **Enter** calls
+  `openSelected`, which uses `openItem` on the highlighted row. **Esc** and the
+  `×` close the dialog.
+- `openItem` runs `space.select` for a space or `tab.select` for a tab, then
+  calls `close`. The command runs before the overlay closes, so a missing
+  overlay id can never swallow the selection. `close` tries the known overlay
+  id first, then falls back to `closeOverlay()` and swallows errors.
+- **Go** is the same action with the machine's first space; it is hidden when
   that machine has no space on this screen.
 - **Install key…** is the permanent fix. It opens a local space named
   `<machine> key` with a `key` tab and this shell, then closes the dialog:
@@ -154,8 +156,8 @@ running mod reads the real `hc machine ls`.
 
 - One mod, `mods/machine-login/`:
   - `mod.json`: `{ "place": "bottom", "size": 34, "title": "Machine login",
-    "version": "0.3.0", "overlay": { "kind": "dialog", "width": 680,
-    "height": 560 } }`. The first time Herdr sees the folder it docks the strip
+    "version": "0.4.0", "overlay": { "kind": "dialog", "width": 760,
+    "height": 620 } }`. The first time Herdr sees the folder it docks the strip
     into the shown layout; the overlay is what `mod.open` uses for the list.
   - `keys.json`: `{ "global": { "ctrl-alt-m": "mod.open:machine-login" } }`.
   - `main.js`: imports `View`, `div`, `svg` from `gpui-kit`, `v_flex`,
@@ -177,22 +179,25 @@ running mod reads the real `hc machine ls`.
       `cx.notify()`.
     - `notifyLogins` keeps `this.notified` as a per-machine timestamp and posts
       at most one notice per 10 minutes for a machine in `needs_login`.
-    - `openList` calls `openOverlay` with the same 680×560 dialog.
-    - `spacesFor(machine)` filters `spaces()` by `machine`; `matches(m, q)`
-      matches machine name/target/state or a space name; `rows()` returns the
-      filtered attention-first machines.
-    - `closeAndSelect(id)` closes the overlay and calls `space.select`;
-      `openFirst` implements Enter.
+    - `openList` calls `openOverlay` with the same 760×620 dialog.
+    - `spacesFor(machine)` filters `spaces()` by `machine`.
+    - `buildView()` returns the attention-first machine tree with filtered
+      spaces and tabs; `pickable()` flattens it for the keyboard; `keyOf(row)`
+      identifies a space or tab.
+    - `openItem(row)` runs `space.select` or `tab.select`, then `close`.
+      `openSelected` uses the highlighted `at`; `close` tries the overlay id,
+      falls back to `closeOverlay()`, and swallows errors.
     - `button(id, label, primary, tooltip, onClick)` is the shared 26px action
       button; it stops propagation so a click does not also close/select.
     - `row` draws the strip's dot, name, state, Login/Retry, Copy and divider.
     - `renderStrip` chooses checking / error / all-connected / attention, makes
       **Machines** open the list, and always draws the refresh button.
-    - `spaceRows(m, t)` draws the connected machine's space rows.
-    - `card(m, t, cx)` draws one dialog card: state dot, name, state, target,
-      Go, Login/Retry, Install key…, Copy, and the spaces.
-    - `renderList` draws the dialog header, the search field, the scrollable
-      cards and the footer.
+    - `machineHeader` draws the machine dot/name/state/target/space count and
+      the Go / Login / Retry / Install key / Copy buttons.
+    - `spaceRow` and `tabRow` draw the selectable tree rows and their click
+      handlers. `machineBlock` composes a machine with its rows.
+    - `renderList` draws the header, the search field, the scrollable tree and
+      the footer; it wires `↑`/`↓`/Esc on the root and starts at the active tab.
     - `render(cx)` returns `renderList` when `this.overlay` is set, otherwise
       `renderStrip`.
 - No images, fonts, SVGs or other assets. No network requests.
@@ -267,16 +272,16 @@ running mod reads the real `hc machine ls`.
   "you@build-box.local", via: false }` shows `Machines ● build-box needs login`
   with **Login** and **Copy**, and posts one notification whose click would run
   the same login.
-- Clicking **Machines** (or pressing `Ctrl+Alt+M`) opens the 680×560 dialog.
+- Clicking **Machines** (or pressing `Ctrl+Alt+M`) opens the 760×620 dialog.
   Attention is first; the needs-login card shows **Login**, **Install key…** and
   **Copy**. Connected cards show **Copy**, **Go** when they have a space, and
-  their space rows; no **Retry** on connected cards.
-- Typing a space name (for example `slack`) filters to the machines holding a
-  matching space and leaves that space visible. **Enter** closes the dialog and
-  selects the first matching space. With no match the list says
-  `No machine or space matches.`
-- Clicking a space row selects that space and closes the dialog. Clicking
-  **Go** selects the machine's first space.
+  their space and tab rows; no **Retry** on connected cards.
+- Typing a space or tab name (for example `slack`) filters the tree to the
+  matching spaces/tabs; **↑/↓** moves the highlight and **Enter** closes the
+  dialog and opens the highlighted space or tab. With no match the list says
+  `No machine, space or tab matches.`
+- Clicking a space row selects that space; clicking a tab row selects that exact
+  tab. Both close the dialog. Clicking **Go** selects the machine's first space.
 - Clicking **Login** creates a local space named `build-box login` with a
   `login` tab, and the terminal shows the `(user@host) Password:` prompt (or the
   real SSH error). Closing the space leaves the saved machine untouched.
