@@ -51,6 +51,9 @@ cp -R mods/machine-login ~/.config/herdr-app/mods/
 herdr-app check ~/.config/herdr-app/mods/machine-login
 ```
 
+Once the gallery has indexed the repo, the short link is
+`herdr.dev/mods/ksajan/herdr-machine-login`.
+
 The app docks it at the bottom of the layout shown at install time. If you use
 several layouts, add this block to each one:
 

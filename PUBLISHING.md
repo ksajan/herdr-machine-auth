@@ -13,11 +13,11 @@ The mod itself is ready. This folder is the gallery submission.
    - `preview.png`
 4. Do not commit `jsconfig.json`, `gpui-kit.d.ts`, `.error` files or other
    generated app-home files.
-5. After the gallery entry exists, its install line will be:
+5. The gallery entry's install line is:
 
    ```text
    Read ~/.config/herdr-app/AGENTS.md, then add this mod:
-   herdr.dev/mods/<owner>/herdr-machine-login
+   herdr.dev/mods/ksajan/herdr-machine-login
    ```
 
 6. Optional: add a short release note or tag. The gallery does not require it.
