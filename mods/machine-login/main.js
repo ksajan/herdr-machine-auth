@@ -4,8 +4,8 @@
 // normal local terminal, because SSH must be able to ask for a password or a
 // code. No credentials are read or stored here.
 
-import { View, div } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { View, div, svg } from "gpui-kit";
+import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { hc, notify, run, theme, props, openOverlay, closeOverlay, spaces } from "herdr";
 
 const shellArg = (value) => /^[a-z0-9_@%+=:,./-]+$/i.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
@@ -62,6 +62,14 @@ export default class MachineLogin extends View {
     this.loading = true;
     this.copied = null;
     this.notified = {}; // machine -> when its login notice was last posted
+    this.filter = "";
+    if (this.overlay) {
+      this.input = InputState.new({ placeholder: "Search machines or spaces…" });
+      this.input.on("change", (_e, cx) => { this.filter = this.input.value(); cx.notify(); });
+      this.input.on("submit", (_e, cx) => this.openFirst(cx));
+      this.input.focus();
+      cx.timer.after(600, () => this.input.focus());
+    }
     cx.timer.every(5000, (cx) => this.refresh(cx));
     this.refresh(cx);
   }
@@ -105,7 +113,40 @@ export default class MachineLogin extends View {
   }
 
   openList() {
-    openOverlay({ mod: "machine-login", kind: "dialog", width: 680, height: 520 });
+    openOverlay({ mod: "machine-login", kind: "dialog", width: 680, height: 560 });
+  }
+
+  spacesFor(machine) {
+    return spaces().filter((s) => (s.machine ?? null) === (machine ?? null));
+  }
+
+  matches(m, q) {
+    if (!q) return true;
+    const hay = `${m.name} ${m.target ?? ""} ${m.state ?? ""}`.toLowerCase();
+    if (hay.includes(q)) return true;
+    return this.spacesFor(m.name).some((s) => s.name.toLowerCase().includes(q));
+  }
+
+  rows() {
+    const q = this.filter.trim().toLowerCase();
+    const attention = this.machines.filter((m) => m.state !== "connected" && this.matches(m, q));
+    const connected = this.machines.filter((m) => m.state === "connected" && this.matches(m, q));
+    return [...attention, ...connected];
+  }
+
+  closeAndSelect(id) {
+    closeOverlay(this.overlay);
+    run("space.select", { id });
+  }
+
+  openFirst(_cx) {
+    const q = this.filter.trim().toLowerCase();
+    if (!q) return;
+    for (const m of this.rows()) {
+      const list = this.spacesFor(m.name);
+      const hit = list.find((s) => s.name.toLowerCase().includes(q)) ?? list[0];
+      if (hit) { this.closeAndSelect(hit.id); return; }
+    }
   }
 
   button(id, label, primary, tooltip, onClick) {
@@ -161,6 +202,21 @@ export default class MachineLogin extends View {
           .child("↻")));
   }
 
+  spaceRows(m, t) {
+    const q = this.filter.trim().toLowerCase();
+    const machineHit = `${m.name} ${m.target ?? ""} ${m.state ?? ""}`.toLowerCase().includes(q);
+    const list = this.spacesFor(m.name).filter((s) => !q || machineHit || s.name.toLowerCase().includes(q));
+    if (!list.length) return div().px(7).text_size(11).text_color(t.dim).child(q ? "No spaces match." : "No spaces on this screen.");
+    return v_flex().gap(2).children(list.map((s) => h_flex()
+      .id(`machine-space-${s.id}`).h(26).px(7).rounded(5).gap(6).items_center().cursor_pointer()
+      .hover((el) => el.bg(t.hover))
+      .on_click((e, cx) => { e.stop_propagation(); this.closeAndSelect(s.id); })
+      .child(div().size(5).rounded(3).flex_none().bg(s.status ? (t[s.status] ?? t.dim) : t.dim))
+      .child(div().truncate().text_color(s.active ? t.foreground : t.muted).child(s.name))
+      .child(div().flex_1())
+      .child(div().text_size(10.5).text_color(t.dim).child(`${s.tabs?.length ?? 0} tab${(s.tabs?.length ?? 0) === 1 ? "" : "s"}`))));
+  }
+
   card(m, t, cx) {
     const state = String(m.state ?? "unknown").replace(/_/g, " ");
     const login = m.state === "needs_login";
@@ -187,14 +243,15 @@ export default class MachineLogin extends View {
           () => { closeOverlay(this.overlay); run("space.new", keyArgs(m.name, m.target)); })))
         .child(this.button(`machine-login-copy-${m.name}`, this.copied === m.name ? "Copied" : "Copy", false,
           command,
-          (_e, cx) => { cx.write_to_clipboard(command); this.copied = m.name; cx.notify(); })));
+          (_e, cx) => { cx.write_to_clipboard(command); this.copied = m.name; cx.notify(); })))
+      .when(m.state === "connected", (el) => el.child(this.spaceRows(m, t)));
   }
 
   renderList(t, cx) {
     const attention = this.machines.filter((m) => m.state !== "connected");
     const connected = this.machines.filter((m) => m.state === "connected");
-    const ordered = [...attention, ...connected];
-    return v_flex().size_full().p(16).gap(12).bg(t.popover).text_color(t.muted)
+    const shown = this.rows();
+    return v_flex().size_full().p(16).gap(10).bg(t.popover).text_color(t.muted)
       .child(h_flex().gap(8).items_center()
         .child(div().text_size(16).font_semibold().text_color(t.foreground).child("Machines"))
         .child(div().text_size(12).text_color(t.dim).child(`${connected.length} connected${attention.length ? ` · ${attention.length} need attention` : ""}`))
@@ -209,12 +266,16 @@ export default class MachineLogin extends View {
           .tooltip("Close")
           .on_click((_e, cx) => { cx.stop_propagation(); closeOverlay(this.overlay); })
           .child("×")))
+      .child(h_flex().h(36).flex_none().px(10).gap(8).items_center().rounded(9).border_1().border_color(t.accent).bg(t.background)
+        .child(svg("mods/workspace-chrome/search.svg").size(15).text_color(t.dim))
+        .child(Input.new(this.input).flex_1().h_full().text_size(12.8).text_color(t.foreground)))
       .when(this.loading, (el) => el.child(div().text_size(12).text_color(t.dim).child("checking…")))
       .when(!this.loading && this.error, (el) => el.child(div().text_size(12).text_color(t.blocked).child(`Couldn't check machines: ${this.error}`)))
       .child(v_flex().flex_1().min_h(0).gap(7).overflow_y_scrollbar()
-        .when(!this.loading && !this.error && ordered.length === 0, (el) => el.child(div().py(8).text_size(12).text_color(t.dim).child("No saved machines yet.")))
-        .children(ordered.map((m) => this.card(m, t, cx))))
-      .child(div().text_size(11).text_color(t.dim).child("Login opens hc machine login in a local terminal. Install key reads only public keys and writes authorized_keys; no credentials are stored."));
+        .when(!this.loading && !this.error && shown.length === 0, (el) => el.child(div().py(8).text_size(12).text_color(t.dim)
+          .child(this.filter.trim() ? "No machine or space matches." : "No saved machines yet.")))
+        .children(shown.map((m) => this.card(m, t, cx))))
+      .child(div().text_size(11).text_color(t.dim).child("Type to search. Enter opens the first matching space. Login opens hc machine login in a local terminal; Install key reads only public keys and writes authorized_keys."));
   }
 
   render(cx) {

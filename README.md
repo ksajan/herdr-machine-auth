@@ -27,8 +27,9 @@ that can ask.
   **Copy** buttons. A machine that is merely unreachable or asleep gets
   **Retry** instead. Several machines scroll horizontally.
 - Click **Machines** (or press `Ctrl+Alt+M`) to open the full machine list: every
-  saved machine, its target, state, and **Login / Retry**, **Install key…**,
-  **Copy** and **Go** actions. Attention comes first.
+  saved machine, its target, state, **Login / Retry**, **Install key…**,
+  **Copy**, **Go**, and the machine's spaces. Attention comes first. Search
+  filters machines and spaces; **Enter** opens the first matching space.
 - **Install key…** is the permanent fix: it runs `ssh-copy-id` for your first
   `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`, then logs in once. Future
   reconnects use the key and no longer prompt.
@@ -118,7 +119,9 @@ button is not useful there.
   For a custom port, a Host alias that `ssh-copy-id` cannot parse, or a
   different key, run `ssh-copy-id` once in your own terminal.
 - The dialog's **Go** button selects the first space on that machine. It is
-  hidden if that machine has no space on the current screen.
+  hidden if that machine has no space on the current screen. Its **spaces** rows
+  do the same for one space; the search field matches machine names, targets,
+  states and space names.
 - The mod quotes machine names for the `sh -c` wrapper; names from `hc` are
   already constrained, but the quoting keeps a renamed machine safe.
 - `Ctrl+Alt+M` is the default list shortcut. Change or remove it in

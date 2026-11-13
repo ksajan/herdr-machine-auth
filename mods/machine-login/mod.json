@@ -2,10 +2,10 @@
   "place": "bottom",
   "size": 34,
   "title": "Machine login",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "overlay": {
     "kind": "dialog",
     "width": 680,
-    "height": 520
+    "height": 560
   }
 }
