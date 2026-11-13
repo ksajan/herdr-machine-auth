@@ -6,7 +6,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { hc, notify, run, theme, props, openOverlay, closeOverlay, spaces } from "herdr";
+import { hc, notify, run, theme, props, openOverlay, closeOverlay, spaces, agents } from "herdr";
 
 const shellArg = (value) => /^[a-z0-9_@%+=:,./-]+$/i.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
 const commandFor = (machine) => `hc machine login ${shellArg(machine)}`;
@@ -122,19 +122,50 @@ export default class MachineLogin extends View {
     return spaces().filter((s) => (s.machine ?? null) === (machine ?? null));
   }
 
+  fuzzy(hay, q) {
+    let at = 0;
+    for (const ch of q) {
+      at = hay.indexOf(ch, at);
+      if (at === -1) return false;
+      at++;
+    }
+    return true;
+  }
+
+  matchesQuery(text, q) {
+    if (!q) return true;
+    const hay = String(text ?? "").toLowerCase();
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return tokens.every((tok) => hay.includes(tok)) || tokens.every((tok) => this.fuzzy(hay, tok));
+  }
+
+  tabsFor(s, tabs) {
+    return tabs.length === 1 && (tabs[0].name ?? "") === s.name ? [] : tabs;
+  }
+
+  statusColor(t, status) {
+    return status ? (t[status] ?? t.dim) : t.dim;
+  }
+
   buildView() {
     const q = this.filter.trim().toLowerCase();
+    const allAgents = agents();
     const ordered = [
       ...this.machines.filter((m) => m.state !== "connected"),
       ...this.machines.filter((m) => m.state === "connected"),
     ];
     const out = [];
     for (const m of ordered) {
-      const machineHit = !q || `${m.name} ${m.target ?? ""} ${m.state ?? ""}`.toLowerCase().includes(q);
+      const machineText = `${m.name} ${m.target ?? ""} ${m.state ?? ""}`;
+      const machineHit = this.matchesQuery(machineText, q);
       const spaces = [];
       for (const s of this.spacesFor(m.name)) {
-        const spaceHit = !q || machineHit || s.name.toLowerCase().includes(q);
-        const tabs = (s.tabs ?? []).filter((tab) => !q || machineHit || spaceHit || (tab.name ?? "").toLowerCase().includes(q));
+        const spaceText = `${machineText} ${s.name} ${s.status ?? ""}`;
+        const spaceHit = this.matchesQuery(spaceText, q);
+        const tabs = (s.tabs ?? []).filter((tab) => {
+          const agentText = allAgents.filter((a) => a.tab === tab.id).map((a) => `${a.app ?? ""} ${a.title ?? ""}`).join(" ");
+          return !q || machineHit || spaceHit || this.matchesQuery(`${spaceText} ${tab.name ?? ""} ${tab.status ?? ""} ${agentText}`, q);
+        });
         if (!spaceHit && !tabs.length) continue;
         spaces.push({ s, tabs });
       }
@@ -149,7 +180,7 @@ export default class MachineLogin extends View {
     for (const group of this.buildView()) {
       for (const { s, tabs } of group.spaces) {
         out.push({ kind: "space", m: group.m, s });
-        for (const tab of tabs) out.push({ kind: "tab", m: group.m, s, tab });
+        for (const tab of this.tabsFor(s, tabs)) out.push({ kind: "tab", m: group.m, s, tab });
       }
     }
     return out;
@@ -161,9 +192,11 @@ export default class MachineLogin extends View {
 
   openItem(row) {
     if (!row) return;
-    if (row.kind === "space") run("space.select", { id: row.s.id });
-    else if (row.kind === "tab") run("tab.select", { id: row.tab.id });
+    const space = row.kind === "space" ? row.s.id : null;
+    const tab = row.kind === "tab" ? row.tab.id : null;
     this.close();
+    if (space) run("space.select", { id: space });
+    else if (tab) run("tab.select", { id: tab });
   }
 
   openSelected() {
@@ -234,18 +267,25 @@ export default class MachineLogin extends View {
           .child("↻")));
   }
 
-  machineHeader(m, t, spaceCount) {
+  machineHeader(m, t, spaces) {
     const state = String(m.state ?? "unknown").replace(/_/g, " ");
     const login = m.state === "needs_login";
     const reason = m.why ? ` (${m.why})` : "";
     const command = commandFor(m.name);
     const first = this.spacesFor(m.name)[0];
+    const spaceCount = spaces.length;
+    const statuses = spaces.map(({ s }) => s.status).filter(Boolean);
+    const top = ["blocked", "working", "done", "idle"].find((s) => statuses.includes(s));
+    const topCount = top ? statuses.filter((s) => s === top).length : 0;
     return h_flex().gap(7).items_center()
       .child(div().size(7).rounded(4).flex_none().bg(login ? t.blocked : m.state === "connected" ? t.ansi2 : t.dim))
       .child(div().text_size(13).font_medium().text_color(t.foreground).child(m.name))
       .child(div().text_size(11).text_color(login ? t.blocked : t.dim).child(state))
       .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).tooltip(reason || m.target || "")
         .child(m.target ? `${m.target}${reason}` : "no target"))
+      .when(Boolean(top), (el) => el.child(h_flex().flex_none().gap(4).items_center()
+        .child(div().size(5).rounded(3).bg(t[top] ?? t.dim))
+        .child(div().text_size(10.5).text_color(t[top] ?? t.dim).child(`${top}${topCount > 1 ? ` ${topCount}` : ""}`))))
       .child(div().flex_none().text_size(10.5).text_color(t.dim).child(`${spaceCount} space${spaceCount === 1 ? "" : "s"}`))
       .when(Boolean(first), (el) => el.child(this.button(`machine-login-go-${m.name}`, "Go", false,
         `Show the first space on ${m.name}.`,
@@ -268,37 +308,38 @@ export default class MachineLogin extends View {
     return h_flex().id(`ml-space-${s.id}`).h(30).pl(10).pr(8).gap(7).items_center().rounded(6)
       .when(selected, (el) => el.bg(t.selected))
       .when(!selected, (el) => el.hover((e) => e.bg(t.hover)))
-      .cursor_pointer().on_click((e, cx) => { e.stop_propagation(); this.openItem(row); })
+      .cursor_pointer().on_click((_e, cx) => { cx.stop_propagation(); this.openItem(row); })
       .child(div().size(5).rounded(3).flex_none().bg(status))
-      .child(div().min_w(0).truncate().text_size(12.5).text_color(selected ? t.foreground : t.muted).child(s.name))
+      .child(div().min_w(0).truncate().text_size(12.5).text_color(selected || s.active ? t.foreground : t.muted).child(s.name))
       .child(div().flex_1())
+      .child(div().flex_none().text_size(10.5).text_color(this.statusColor(t, s.status)).child(s.status ?? "—"))
       .child(div().flex_none().text_size(10.5).text_color(t.dim).child(`${count} tab${count === 1 ? "" : "s"}`));
   }
 
   tabRow(row, t, selected) {
     const tab = row.tab;
-    const status = row.s.status ? (t[row.s.status] ?? t.dim) : t.dim;
+    const status = this.statusColor(t, tab.status);
     return h_flex().id(`ml-tab-${tab.id}`).h(26).pl(28).pr(8).gap(7).items_center().rounded(5)
       .when(selected, (el) => el.bg(t.selected))
       .when(!selected, (el) => el.hover((e) => e.bg(t.hover)))
-      .cursor_pointer().on_click((e, cx) => { e.stop_propagation(); this.openItem(row); })
+      .cursor_pointer().on_click((_e, cx) => { cx.stop_propagation(); this.openItem(row); })
       .child(div().size(4).rounded(2).flex_none().bg(status))
-      .child(div().min_w(0).truncate().text_size(12).text_color(selected ? t.foreground : t.dim).child(tab.name ?? "tab"))
+      .child(div().min_w(0).truncate().text_size(12).text_color(selected || tab.active ? t.foreground : t.dim).child(tab.name ?? "tab"))
       .child(div().flex_1())
-      .when(tab.active, (el) => el.child(div().text_size(10).text_color(t.dim).child("shown")));
+      .when(Boolean(tab.status), (el) => el.child(div().text_size(10).text_color(this.statusColor(t, tab.status)).child(tab.status)));
   }
 
   machineBlock(group, t, selKey) {
     const { m, spaces } = group;
     return v_flex().gap(3).p(9).rounded(8).bg(t.surface).border_1().border_color(t.border)
-      .child(this.machineHeader(m, t, spaces.length))
+      .child(this.machineHeader(m, t, spaces))
       .when(spaces.length === 0, (el) => el.child(div().pl(12).text_size(11).text_color(t.dim)
         .child(m.state === "connected" ? "No spaces on this screen." : "Log in to see its spaces.")))
       .children(spaces.map(({ s, tabs }) => {
         const spaceItem = { kind: "space", m, s };
         return v_flex().gap(1)
           .child(this.spaceRow(spaceItem, t, selKey === this.keyOf(spaceItem)))
-          .children(tabs.map((tab) => {
+          .children(this.tabsFor(s, tabs).map((tab) => {
             const tabItem = { kind: "tab", m, s, tab };
             return this.tabRow(tabItem, t, selKey === this.keyOf(tabItem));
           }));

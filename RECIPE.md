@@ -51,13 +51,18 @@ Clicking **Machines** (or pressing `Ctrl+Alt+M`) opens a 760×620 dialog on
   - Header row: a 7px state dot (`blocked` for `needs_login`, `ansi2` for
     connected, `dim` otherwise), name 13px medium in `foreground`, state 11px
     (`blocked` for `needs_login` else `dim`), the target in 11px `dim` (with
-    `why` when `hc` gives one), the space count in 10.5px `dim`, then **Go**
-    (first space), **Login** / **Retry**, **Install key…** and **Copy**.
+    `why` when `hc` gives one), the top agent status and count in the status's
+    color, the space count in 10.5px `dim`, then **Go** (first space),
+    **Login** / **Retry**, **Install key…** and **Copy**. The status summary
+    uses only the spaces currently shown after filtering.
   - Space rows: 30px high, 10px left padding, a 5px status dot, the name 12.5px
-    (`muted`, or `foreground` when active), and `${tabs} tab(s)` in 10.5px
-    `dim`.
+    (`muted`, or `foreground` when active), the status word on the right in
+    `working`/`blocked`/`done`/`idle` color (or `—`), and `${tabs} tab(s)` in
+    10.5px `dim`.
   - Tab rows: 26px high, 28px left padding, a 4px status dot, the tab name
-    12px (`dim`, or `foreground` when selected), and `shown` for the active tab.
+    12px (`dim`, or `foreground` when selected or active), and the tab's own
+    status word on the right. A space whose only tab has the same name as the
+    space hides that tab row; the space row opens it.
   - The highlighted row uses `selected`; the hovered row uses `hover`. Clicking
     a space row calls `space.select`; clicking a tab row calls `tab.select`.
     With no spaces: `No spaces on this screen.` or `Log in to see its spaces.`
@@ -80,10 +85,14 @@ running mod reads the real `hc machine ls`.
   `keys.json` binds `ctrl-alt-m` to `mod.open:machine-login`, so the same dialog
   opens from a key. `mod.json` carries the same 760×620 dialog as its default
   overlay.
-- `buildView()` filters the tree. It lowercases `filter`; a machine matches by
-  name, target or state; a space matches by name; a tab matches by name. A
-  machine match keeps all its spaces and tabs; a space match keeps its tabs; a
-  tab match keeps the parent machine and space. Attention machines come first.
+- `buildView()` filters the tree. It lowercases `filter`; `matchesQuery` first
+  tries every whitespace token as a substring, then as an in-order subsequence.
+  A machine matches by name, target or state; a space adds its name and status;
+  a tab adds its name, status and each agent's `app`/`title` (from `agents()`).
+  A machine match keeps all its spaces and tabs; a space match keeps its tabs;
+  a tab match keeps the parent machine and space. Attention machines come
+  first. `tabsFor(s, tabs)` drops the redundant single tab whose name equals its
+  space's name.
 - `pickable()` flattens the tree to space and tab rows for the keyboard.
   `renderList` starts at the active tab (or active space) and clamps `at`.
   `↑`/`↓` move `at` with wraparound; the root's `on_key_down` stops propagation
@@ -156,7 +165,7 @@ running mod reads the real `hc machine ls`.
 
 - One mod, `mods/machine-login/`:
   - `mod.json`: `{ "place": "bottom", "size": 34, "title": "Machine login",
-    "version": "0.4.0", "overlay": { "kind": "dialog", "width": 760,
+    "version": "0.5.0", "overlay": { "kind": "dialog", "width": 760,
     "height": 620 } }`. The first time Herdr sees the folder it docks the strip
     into the shown layout; the overlay is what `mod.open` uses for the list.
   - `keys.json`: `{ "global": { "ctrl-alt-m": "mod.open:machine-login" } }`.
@@ -181,21 +190,29 @@ running mod reads the real `hc machine ls`.
       at most one notice per 10 minutes for a machine in `needs_login`.
     - `openList` calls `openOverlay` with the same 760×620 dialog.
     - `spacesFor(machine)` filters `spaces()` by `machine`.
+    - `fuzzy(hay, q)` is the in-order subsequence match; `matchesQuery(text, q)`
+      is token-substring or token-fuzzy; `tabsFor(s, tabs)` hides a redundant
+      single same-name tab; `statusColor(t, status)` maps a status to its theme
+      color.
     - `buildView()` returns the attention-first machine tree with filtered
       spaces and tabs; `pickable()` flattens it for the keyboard; `keyOf(row)`
       identifies a space or tab.
-    - `openItem(row)` runs `space.select` or `tab.select`, then `close`.
+    - `openItem(row)` closes first, then runs `space.select` or `tab.select`.
       `openSelected` uses the highlighted `at`; `close` tries the overlay id,
       falls back to `closeOverlay()`, and swallows errors.
     - `button(id, label, primary, tooltip, onClick)` is the shared 26px action
-      button; it stops propagation so a click does not also close/select.
+      button; it stops propagation with `cx.stop_propagation()` so a click does
+      not also close/select.
     - `row` draws the strip's dot, name, state, Login/Retry, Copy and divider.
     - `renderStrip` chooses checking / error / all-connected / attention, makes
       **Machines** open the list, and always draws the refresh button.
-    - `machineHeader` draws the machine dot/name/state/target/space count and
-      the Go / Login / Retry / Install key / Copy buttons.
-    - `spaceRow` and `tabRow` draw the selectable tree rows and their click
-      handlers. `machineBlock` composes a machine with its rows.
+    - `machineHeader` draws the machine dot/name/state/target, the top status
+      and count from the filtered spaces, the space count, and the Go / Login /
+      Retry / Install key / Copy buttons.
+    - `spaceRow` and `tabRow` draw the selectable tree rows, their status words
+      and their click handlers (which stop propagation through `cx`). A tab row
+      uses `tab.status`; a space row uses `s.status`.
+    - `machineBlock` composes a machine with its filtered space and tab rows.
     - `renderList` draws the header, the search field, the scrollable tree and
       the footer; it wires `↑`/`↓`/Esc on the root and starts at the active tab.
     - `render(cx)` returns `renderList` when `this.overlay` is set, otherwise
@@ -278,10 +295,16 @@ running mod reads the real `hc machine ls`.
   their space and tab rows; no **Retry** on connected cards.
 - Typing a space or tab name (for example `slack`) filters the tree to the
   matching spaces/tabs; **↑/↓** moves the highlight and **Enter** closes the
-  dialog and opens the highlighted space or tab. With no match the list says
-  `No machine, space or tab matches.`
+  dialog and opens the highlighted space or tab. Typing `working`, `blocked`,
+  `done` or `idle` filters by status. Multi-word and fuzzy queries match. With
+  no match the list says `No machine, space or tab matches.`
 - Clicking a space row selects that space; clicking a tab row selects that exact
   tab. Both close the dialog. Clicking **Go** selects the machine's first space.
+- Space and tab rows show their live status word on the right, with the status
+  color; the machine header shows its top status and count. Filtering to
+  `working` changes the machine header's summary to the visible working spaces.
+- A space with one tab whose name equals the space name shows no tab row; the
+  space row opens that tab.
 - Clicking **Login** creates a local space named `build-box login` with a
   `login` tab, and the terminal shows the `(user@host) Password:` prompt (or the
   real SSH error). Closing the space leaves the saved machine untouched.

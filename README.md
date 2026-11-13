@@ -29,12 +29,14 @@ that can ask.
 - Click **Machines** (or press `Ctrl+Alt+M`) to open the machine tree: every
   saved machine, its target, state, **Login / Retry**, **Install key…**,
   **Copy**, **Go**, and its spaces and tabs. Attention comes first.
-- Search matches machine names, targets, states, space names and tab names.
-  Use **↑/↓** to move the highlight and **Enter** to open the selected space or
-  tab; clicking a space or tab opens it too. **Esc** closes the dialog.
-- Each tab row shows whether it is the shown tab; a space row shows its tab
-  count and the agent status dot. Clicking a space opens it; clicking a tab
-  opens that exact tab.
+- Search matches machine names, targets, states, space/tab names, agent statuses
+  and agent titles. Multi-word and fuzzy queries work. Use **↑/↓** to move the
+  highlight and **Enter** to open the selected space or tab; clicking a space
+  or tab opens it too. **Esc** closes the dialog.
+- Space and tab rows show their live agent status (`working`, `blocked`, `done`,
+  `idle`) on the right, next to the tab count. The machine header shows its
+  highest status and how many spaces have it. A single tab with the same name
+  as its space is not repeated; the space row already opens it.
 - **Install key…** is the permanent fix: it runs `ssh-copy-id` for your first
   `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`, then logs in once. Future
   reconnects use the key and no longer prompt.
@@ -125,9 +127,9 @@ button is not useful there.
   different key, run `ssh-copy-id` once in your own terminal.
 - The dialog's **Go** button selects the first space on that machine. It is
   hidden if that machine has no space on the current screen. The tree lists
-  spaces and tabs under each connected machine; search matches machine names,
-  targets, states, space names and tab names. `↑/↓` and Enter work while the
-  search field has focus.
+  spaces and tabs under each connected machine; search matches names, targets,
+  states, statuses and agent titles. `↑/↓` and Enter work while the search field
+  has focus.
 - The mod quotes machine names for the `sh -c` wrapper; names from `hc` are
   already constrained, but the quoting keeps a renamed machine safe.
 - `Ctrl+Alt+M` is the default list shortcut. Change or remove it in
