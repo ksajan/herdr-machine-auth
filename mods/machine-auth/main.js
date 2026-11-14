@@ -6,21 +6,47 @@
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { hc, notify, run, theme, props, openOverlay, closeOverlay } from "herdr";
+import { hc, notify, run, theme, props, openOverlay, closeOverlay, nextCommand } from "herdr";
 
 const shellArg = (value) => /^[a-z0-9_@%+=:,./-]+$/i.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
 const commandFor = (machine) => `hc machine login ${shellArg(machine)}`;
 
 // A new local space keeps the login visible and leaves the machine being
-// viewed alone. Keeping the terminal open after the command means a failed
-// login stays readable.
+// viewed alone. The terminal closes its own tab when it is done: after a
+// successful login it waits a moment; after a failure it waits for Enter.
+// The app's launch wrapper starts an interactive shell after `sh -c`, so
+// closing the tab from inside the command is what prevents leftover tabs.
+function closeTab() {
+  return [
+    'close_tab() {',
+    '  [ -n "${HC_TERMINAL_ID:-}" ] || return 0',
+    '  tab=$(hc get "$HC_TERMINAL_ID" --json 2>/dev/null | grep -o \'"herdr.tab":"[^"]*"\' | cut -d\'"\' -f4)',
+    '  [ -n "$tab" ] || return 0',
+    '  app=$(command -v herdr-app 2>/dev/null || printf "%s" "$HOME/.local/bin/herdr-app")',
+    '  "$app" do tab.close --id "$tab" --confirmed true >/dev/null 2>&1 || true',
+    '}',
+  ].join("\n");
+}
+
 function loginArgs(machine) {
   const command = commandFor(machine);
+  const line = [
+    closeTab(),
+    `${command}; code=$?`,
+    'if [ "$code" -eq 0 ]; then',
+    '  printf "\\nLogged in. Closing…\\n"',
+    '  sleep 1',
+    'else',
+    '  printf "\\nLogin exited %s. Press Enter to close.\\n" "$code"',
+    '  read _',
+    'fi',
+    'close_tab',
+  ].join("\n");
   return {
     name: `${machine} login`,
     tab: "login",
     machine: "",
-    argv: ["sh", "-c", `${command}; code=$?; printf '\\nLogin exited %s. Press Enter to close.\\n' "$code"; read _`],
+    argv: ["sh", "-c", line],
   };
 }
 
@@ -29,6 +55,7 @@ function loginArgs(machine) {
 // authorized_keys. The terminal asks for the password itself.
 function keyArgs(machine, target) {
   const line = [
+    closeTab(),
     'key=$(ls "$HOME"/.ssh/id_ed25519.pub "$HOME"/.ssh/id_rsa.pub 2>/dev/null | head -n 1)',
     'status=1',
     'if [ -z "$key" ]; then',
@@ -42,8 +69,14 @@ function keyArgs(machine, target) {
     '  status=$?',
     '  echo "ssh-copy-id did not finish; nothing was changed."',
     'fi',
-    `printf '\\nInstall key exited %s. Press Enter to close.\\n' "$status"`,
-    'read _',
+    'if [ "$status" -eq 0 ]; then',
+    '  printf "\\nKey installed and logged in. Closing…\\n"',
+    '  sleep 1',
+    'else',
+    '  printf "\\nInstall key exited %s. Press Enter to close.\\n" "$status"',
+    '  read _',
+    'fi',
+    'close_tab',
   ].join("\n");
   return {
     name: `${machine} key`,
@@ -61,6 +94,14 @@ export default class MachineAuth extends View {
     this.loading = true;
     this.copied = null;
     this.notified = {}; // machine -> when its login notice was last posted
+    cx.spawn(async (cx) => {
+      for (;;) {
+        const command = await nextCommand();
+        if (command === "install-key") this.installKeyShortcut();
+        else if (command === "login") this.loginShortcut();
+        cx.notify();
+      }
+    });
     cx.timer.every(5000, (cx) => this.refresh(cx));
     this.refresh(cx);
   }
@@ -105,6 +146,27 @@ export default class MachineAuth extends View {
 
   openList() {
     openOverlay({ mod: "machine-auth", kind: "dialog", width: 640, height: 460 });
+  }
+
+  // Ctrl+Alt+K: install a key on the first machine that needs one, then log in.
+  installKeyShortcut() {
+    const need = this.machines.filter((m) => m.state === "needs_login" && m.target && !m.via);
+    if (!need.length) {
+      notify({ title: "No machine needs a login key", body: "Only needs_login machines with a standard target can use Install key.", level: "info" });
+      return;
+    }
+    const m = need[0];
+    run("space.new", keyArgs(m.name, m.target));
+  }
+
+  // Ctrl+Alt+L: log in to the first machine that needs it.
+  loginShortcut() {
+    const m = this.machines.find((x) => x.state === "needs_login");
+    if (!m) {
+      notify({ title: "No machine needs a login", body: "All saved machines are connected.", level: "info" });
+      return;
+    }
+    run("space.new", loginArgs(m.name));
   }
 
   close() {
@@ -217,7 +279,9 @@ export default class MachineAuth extends View {
       .child(v_flex().flex_1().min_h(0).gap(7).overflow_y_scrollbar()
         .when(!this.loading && !this.error && ordered.length === 0, (el) => el.child(div().py(8).text_size(12).text_color(t.dim).child("No saved machines yet.")))
         .children(ordered.map((m) => this.authCard(m, t))))
-      .child(div().text_size(11).text_color(t.dim).child("Login opens hc machine login in a local terminal. Install key reads only public keys and writes authorized_keys; no credentials are stored."));
+      .child(v_flex().gap(2).flex_none()
+        .child(div().text_size(10.5).text_color(t.dim).child("Ctrl+Alt+L logs in to the first machine needing it. Ctrl+Alt+K installs its SSH key."))
+        .child(div().text_size(10.5).text_color(t.dim).child("Login runs hc machine login in a local terminal; no credentials are stored.")));
   }
 
   render(cx) {

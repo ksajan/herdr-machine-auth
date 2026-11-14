@@ -73,21 +73,44 @@ The preview uses a synthetic `build-box` machine; the running mod reads the real
   is an ordinary app command, so Herdr's shipped toast and any custom toast that
   runs actions can use it. While the machine stays in `needs_login`, the notice
   repeats after 10 minutes; when it leaves that state the record is cleared.
+- `Ctrl+Alt+A` opens the dialog. `Ctrl+Alt+L` logs in to the first
+  `needs_login` machine; `Ctrl+Alt+K` installs a key on the first
+  `needs_login` machine with a target and `via: false`. The keys deliver
+  `machine-auth.login` and `machine-auth.install-key` to `nextCommand()`;
+  there are no arguments, so the mod picks the first attention machine. If
+  there is nothing to do, it posts an info notification.
 - **Login / Retry** calls `run("space.new", ...)` to make a **local** space
-  (machine `""`) named `<machine> login`, with a tab named `login`. Its command
-  is:
+  (machine `""`) named `<machine> login`, with a tab named `login`. A success
+  closes its tab after a second; a failure waits for Enter, then closes the tab.
+  The app's launch wrapper starts an interactive shell after `sh -c`, so the
+  command itself closes the tab:
 
   ```sh
-  hc machine login <machine>; code=$?; printf '\nLogin exited %s. Press Enter to close.\n' "$code"; read _
+  close_tab() {
+    [ -n "${HC_TERMINAL_ID:-}" ] || return 0
+    tab=$(hc get "$HC_TERMINAL_ID" --json 2>/dev/null | grep -o '"herdr.tab":"[^"]*"' | cut -d'"' -f4)
+    [ -n "$tab" ] || return 0
+    app=$(command -v herdr-app 2>/dev/null || printf "%s" "$HOME/.local/bin/herdr-app")
+    "$app" do tab.close --id "$tab" --confirmed true >/dev/null 2>&1 || true
+  }
+  hc machine login <machine>; code=$?
+  if [ "$code" -eq 0 ]; then
+    printf '\nLogged in. Closing…\n'
+    sleep 1
+  else
+    printf '\nLogin exited %s. Press Enter to close.\n' "$code"
+    read _
+  fi
+  close_tab
   ```
 
-  Running it in `sh -c` keeps the terminal open after the command, so an error
-  or a refused password is readable. The space is local even when the selected
-  space is on another machine, so the login terminal is always available.
+  The space is local even when the selected space is on another machine, so the
+  login terminal is always available.
 - **Install key…** is the permanent fix. It opens a local space named
   `<machine> key` with a `key` tab and this shell, then closes the dialog:
 
   ```sh
+  # Same close_tab helper as the login command.
   key=$(ls "$HOME"/.ssh/id_ed25519.pub "$HOME"/.ssh/id_rsa.pub 2>/dev/null | head -n 1)
   status=1
   if [ -z "$key" ]; then
@@ -101,13 +124,20 @@ The preview uses a synthetic `build-box` machine; the running mod reads the real
     status=$?
     echo "ssh-copy-id did not finish; nothing was changed."
   fi
-  printf '\nInstall key exited %s. Press Enter to close.\n' "$status"
-  read _
+  if [ "$status" -eq 0 ]; then
+    printf '\nKey installed and logged in. Closing…\n'
+    sleep 1
+  else
+    printf '\nInstall key exited %s. Press Enter to close.\n' "$status"
+    read _
+  fi
+  close_tab
   ```
 
   The first existing default public key is installed, then the machine is
-  logged in once. The terminal stays open. No private key or password is read
-  by the mod; SSH asks for the password itself.
+  logged in once. A success closes its tab; a failure waits for Enter, then
+  closes it. No private key or password is read by the mod; SSH asks for the
+  password itself.
 - **Copy** writes `hc machine login <machine>` to the clipboard. It is the same
   command the shipped Spaces mod offers; this mod adds the button.
 - The strip does not change the layout or switch machines. The dialog only
@@ -119,20 +149,27 @@ The preview uses a synthetic `build-box` machine; the running mod reads the real
 
 - One mod, `mods/machine-auth/`:
   - `mod.json`: `{ "place": "bottom", "size": 34, "title": "Machine auth",
-    "version": "0.6.0", "overlay": { "kind": "dialog", "width": 640,
+    "version": "0.7.0", "overlay": { "kind": "dialog", "width": 640,
     "height": 460 } }`. The first time Herdr sees the folder it docks the strip
     into the shown layout; the overlay is what `mod.open` uses for the dialog.
-  - `keys.json`: `{ "global": { "ctrl-alt-a": "mod.open:machine-auth" } }`.
+  - `keys.json`: `ctrl-alt-a` opens the dialog, `ctrl-alt-l` logs in to the
+    first machine needing it, and `ctrl-alt-k` installs its key.
   - `main.js`: imports `View`, `div` from `gpui-kit`, `v_flex`, `h_flex` from
     `gpui-base`, and `hc`, `notify`, `run`, `theme`, `props`, `openOverlay`,
-    `closeOverlay` from `herdr`.
+    `closeOverlay`, `nextCommand` from `herdr`.
     - `shellArg(value)` leaves plain machine names alone and single-quotes
       anything else, escaping embedded single quotes.
     - `commandFor(machine)` returns `hc machine login <quoted>`.
     - `loginArgs(machine)` returns the `space.new` arguments above.
     - `keyArgs(machine, target)` builds the optional `ssh-copy-id` shell above.
+    - `closeTab()` builds the shell helper that reads `HC_TERMINAL_ID`, gets
+      `herdr.tab` from `hc get`, and closes that tab with `herdr-app do
+      tab.close --confirmed true`.
     - `init` sets `this.overlay = props()?.overlay`, empty/loading state, a
-      5-second `cx.timer.every`, and starts the first read.
+      5-second `cx.timer.every`, starts the first read, and runs a
+      `nextCommand()` loop for `install-key` / `login`.
+    - `installKeyShortcut` and `loginShortcut` pick the first attention machine
+      and run `keyArgs` / `loginArgs`; an empty case posts an info notification.
     - `refresh` uses `cx.spawn(async (cx) => ...)`, checks `r.code`, parses
       `r.stdout` as JSON, filters temporary machines, calls `notifyLogins` only
       on the strip copy, and sets `loading`/`error` before `cx.notify()`.
@@ -198,7 +235,16 @@ The preview uses a synthetic `build-box` machine; the running mod reads the real
 - **Machine names may contain punctuation.** Always pass them through
   `shellArg`. Never interpolate an unquoted name into a shell line.
 - **`ctrl-alt-a` may be taken.** The mod ships it in `keys.json`; the person can
-  change or drop it. The Machines label still opens the dialog.
+  change or drop it. The Machines label still opens the dialog. The same applies
+  to `ctrl-alt-l` and `ctrl-alt-k`.
+- **The `Ctrl+Shift+P` palette lists app commands only.** Herdr does not list a
+  mod's own `<mod>.<command>` actions there. The direct keys are the quick route;
+  the dialog's buttons remain the discoverable route.
+- **Auto-close needs `HC_TERMINAL_ID` and `herdr-app`.** App-created terminals
+  have the id. A terminal without it (or a missing `herdr-app`) falls back to
+  leaving the tab open; the login itself still works.
+- **Do not call `hc get` without the terminal id.** The helper must no-op when
+  `HC_TERMINAL_ID` is empty rather than inspecting `t1`.
 
 ## Done when
 
@@ -214,7 +260,11 @@ The preview uses a synthetic `build-box` machine; the running mod reads the real
   **Copy**; connected cards show **Copy** only.
 - Clicking **Login** creates a local space named `build-box login` with a
   `login` tab, and the terminal shows the `(user@host) Password:` prompt (or the
-  real SSH error). Closing the space leaves the saved machine untouched.
+  real SSH error). A successful login closes the tab after a second; a failed
+  one waits for Enter, then closes it. No leftover login tabs.
+- `Ctrl+Alt+L` logs in to the first machine that needs it; `Ctrl+Alt+K` installs
+  its key. With nothing to do, each posts an info notification instead of opening
+  a terminal.
 - Clicking **Install key…** creates a local space named `build-box key` with a
   `key` tab, prompts for the password, runs `ssh-copy-id`, then logs in once
   with `hc machine login`. It reads only the first default public key and keeps

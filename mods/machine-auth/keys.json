@@ -1,5 +1,7 @@
 {
   "global": {
-    "ctrl-alt-a": "mod.open:machine-auth"
+    "ctrl-alt-a": "mod.open:machine-auth",
+    "ctrl-alt-k": "machine-auth.install-key",
+    "ctrl-alt-l": "machine-auth.login"
   }
 }

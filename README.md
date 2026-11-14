@@ -37,13 +37,25 @@ that can ask.
   `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`, then logs in once. Future
   reconnects use the key and no longer prompt.
 - **Login / Retry** opens a local space named `<machine> login` and runs
-  `hc machine login <machine>`. The terminal stays open after the command so a
-  failed login is readable.
+  `hc machine login <machine>`. A successful login closes its tab after a
+  second. A failed login stays until you press Enter, then closes the tab too.
 - **Copy** copies `hc machine login <machine>` for use in your own terminal.
 - Posts a clickable notification when a machine enters `needs_login`. Clicking
   it does the same as **Login**. It repeats after 10 minutes while the machine
   still needs a login, so a dismissed toast is not the end of the story.
 - Refreshes every 5 seconds; the ↻ button checks immediately.
+
+## Shortcuts
+
+- `Ctrl+Alt+A` — open the auth dialog.
+- `Ctrl+Alt+L` — log in to the first machine that needs it.
+- `Ctrl+Alt+K` — install an SSH key on the first machine that needs one, then
+  log in. Only `needs_login` machines with a standard target and a default key
+  are eligible.
+
+Herdr's `Ctrl+Shift+P` palette lists **app commands only**; a mod's own actions
+are not added to it. These direct keys are the quick route. The auth dialog's
+**Install key…** button does the same for a machine you pick.
 
 ## Install
 
@@ -64,7 +76,13 @@ herdr-app check ~/.config/herdr-app/mods/machine-auth
 Merge its keys too, or add the one line yourself:
 
 ```json
-{ "global": { "ctrl-alt-a": "mod.open:machine-auth" } }
+{
+  "global": {
+    "ctrl-alt-a": "mod.open:machine-auth",
+    "ctrl-alt-k": "machine-auth.install-key",
+    "ctrl-alt-l": "machine-auth.login"
+  }
+}
 ```
 
 The app docks the strip at the bottom of the layout shown at install time. If
@@ -98,7 +116,7 @@ button is not useful there.
 
 - Runs `hc machine ls --json` locally every 5 seconds. No network requests from
   the mod.
-- Runs `hc machine login <name>` in a normal terminal when you click Login.
+- Runs `hc machine login <name>` in a normal terminal when you click Login. A successful login closes its tab; a failed one waits for Enter, then closes it.
 - The optional **Install key…** action runs `ssh-copy-id`, which reads one
   public key (the first of `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`) and
   appends it to the machine's `authorized_keys`. It reads no private key and

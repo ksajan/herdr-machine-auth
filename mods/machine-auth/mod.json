@@ -2,7 +2,7 @@
   "place": "bottom",
   "size": 34,
   "title": "Machine auth",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "overlay": {
     "kind": "dialog",
     "width": 640,
