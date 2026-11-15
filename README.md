@@ -25,8 +25,14 @@ for the login attempt; the terminal is removed when it finishes or fails.
   **Copy** buttons. A machine that is merely unreachable or asleep gets
   **Retry** instead.
 - Click **Login** / **Retry** (or press `Ctrl+Alt+L`) to open the password panel:
-  machine, target, one masked input, **Log in**, **Cancel**. On success the panel
-  closes; on failure it stays with the SSH error so you can retry.
+  machine, target, one masked input, **Install my SSH key permanently**,
+  **Log in**, **Cancel**. On success the panel closes; on failure it stays with
+  the SSH error so you can retry.
+- The **Install my SSH key permanently** checkbox joins the two flows: the same
+  password first installs your public key with `ssh-copy-id`, then logs in with
+  it. The choice is remembered for the next login panel.
+- **Install key…** in the auth dialog opens the panel with the checkbox
+  preselected, so you can jump straight to the permanent flow.
 - **Install key…** opens the same panel and runs `ssh-copy-id` for the first of
   `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`, then logs in once. Future
   reconnects use the key and no longer prompt.

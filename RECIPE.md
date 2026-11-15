@@ -40,7 +40,10 @@ A 34px strip across the bottom of the window, on `chrome`:
 - Target line, 11px `dim`.
 - A 38px masked input with `accent` border, `Password or code` placeholder,
   auto-focused.
-- **Log in** / **Install key and log in** primary button and **Cancel**.
+- A 14px checkbox + **Install my SSH key permanently** (hidden in the Install key
+  entry, where it is always on), stored in shared `machine-auth.remember`.
+- **Log in** / **Log in and install key** / **Install key and log in** primary
+  button and **Cancel**.
 - Status: `Waiting for the password prompt…`, the SSH error in `blocked`, or the
   success line in `done`.
 - A note: "The password goes to a hidden local terminal and is not stored. A
@@ -65,6 +68,12 @@ password panel.", level `error`. Clicking it opens the panel for that machine.
   - key: `hc run --bg --json --name ... -- sh -c <keyLine>`, where `keyLine` picks
     the first default public key, runs `ssh-copy-id`, then `hc machine login`.
   The returned address is kept; the terminal is not attached to a pane.
+- The login panel's **Install my SSH key permanently** checkbox sets the same
+  `installing` flag as the **Install key…** entry. When checked, `startHidden`
+  uses `keyLine`, so the one password installs the public key and then logs in.
+  The choice persists in shared `machine-auth.remember`; the Install key entry
+  forces it on. If key install fails, the panel shows the error; unchecking the
+  box retries as a plain login.
 - `pollPrompt` checks `hc get` for a finished terminal, then `hc read` for a
   prompt (`password`, `passphrase`, `passcode`, `verification`, `authenticator`).
   When it appears it sends `pendingPassword` with `hc send --force`, clears the
@@ -87,7 +96,7 @@ password panel.", level `error`. Clicking it opens the panel for that machine.
 
 - One mod, `mods/machine-auth/`:
   - `mod.json`: `{ "place": "bottom", "size": 34, "title": "Machine auth",
-    "version": "0.8.0", "overlay": { "kind": "dialog", "width": 640,
+    "version": "0.9.0", "overlay": { "kind": "dialog", "width": 640,
     "height": 460 } }`. The strip docks on first sight; the overlay is the auth
     dialog. The password panel is opened with `openOverlay` and its own
     440×280 props.
@@ -107,7 +116,8 @@ password panel.", level `error`. Clicking it opens the panel for that machine.
     - `button`, `renderStrip`, `stripRow`, `authCard`, `renderList` draw the
       strip and auth dialog.
     - `submit`, `startHidden`, `pollPrompt`, `watch`, `finish`, `fail`, `cancel`
-      implement the hidden login and panel lifecycle.
+      implement the hidden login and panel lifecycle. `installing` chooses
+      `keyLine`; `remember` mirrors shared `machine-auth.remember`.
     - `renderPrompt` draws the 440×280 panel; `render` chooses prompt / dialog /
       strip.
 - No images, fonts or other assets. No network requests.
@@ -139,6 +149,10 @@ password panel.", level `error`. Clicking it opens the panel for that machine.
   waiting for a password; `--force` is what lets the panel answer it.
 - **Do not put the password on a command line.** It goes through `hc send` to
   the PTY, never through a shell argument or a file.
+- **Install-on-login is explicit.** The checkbox is off until the person turns
+  it on, then remembered. It uses the first default public key and `ssh-copy-id`;
+  a missing key, a custom port, or an unsupported target shows an error and the
+  box can be unchecked for a plain login.
 - **The palette does not list mod actions.** `Ctrl+Shift+P` is app commands only;
   the direct keys and dialog buttons are the route.
 - **`Ctrl+Alt+A/K/L` may be taken.** They are in `keys.json`; the person can
@@ -156,6 +170,8 @@ password panel.", level `error`. Clicking it opens the panel for that machine.
   hidden terminal.
 - **Install key…** runs `ssh-copy-id`, logs in once, closes the panel on success,
   and leaves no visible tab.
+- Checking **Install my SSH key permanently** in a login panel uses the same key
+  install and login flow; the choice is remembered on the next panel.
 - **Copy** puts `hc machine login <machine>` on the clipboard.
 - The notification's action opens the password panel for that machine.
 - Removing the block and mod folder leaves layouts, machines and SSH auth

@@ -40,6 +40,9 @@ export default class MachineAuth extends View {
     this.address = null;
     this.pendingPassword = null;
     this.cancelled = false;
+    this.remember = Boolean(shared("machine-auth.remember"));
+    this.installing = false;
+    this.message = null;
 
     if (this.promptMachine) {
       this.loading = false;
@@ -272,10 +275,17 @@ export default class MachineAuth extends View {
       cx.notify();
       return;
     }
+    const install = this.promptAction === "key" || this.remember;
+    if (install && !this.promptTarget) {
+      this.error = "This machine has no standard target for Install key. Uncheck it and log in, or use Copy.";
+      cx.notify();
+      return;
+    }
     this.busy = true;
     this.status = "starting";
     this.error = null;
     this.pendingPassword = password;
+    this.installing = install;
     this.password.set_value("");
     cx.notify();
     this.startHidden(cx);
@@ -285,7 +295,8 @@ export default class MachineAuth extends View {
     cx.spawn(async (cx) => {
       try {
         const name = `auth-${Date.now().toString(36)}`;
-        const args = this.promptAction === "key"
+        const install = Boolean(this.installing);
+        const args = install
           ? ["run", "--bg", "--json", "--name", name, "--", "sh", "-c", keyLine(this.promptMachine, this.promptTarget)]
           : ["run", "--bg", "--json", "--name", name, "--", "hc", "machine", "login", this.promptMachine];
         const r = await hc(args).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
@@ -366,6 +377,7 @@ export default class MachineAuth extends View {
       if (code === 0) {
         this.status = "done";
         this.error = null;
+        this.message = this.installing ? "Key installed and connected." : "Connected.";
         cx.timer.after(700, () => this.close());
       } else {
         this.status = "error";
@@ -401,23 +413,38 @@ export default class MachineAuth extends View {
 
   renderPrompt(t, cx) {
     const key = this.promptAction === "key";
+    const install = key || this.remember;
     const title = key ? `Install key on ${this.promptMachine}` : `Log in to ${this.promptMachine}`;
-    return v_flex().size_full().p(18).gap(10).bg(t.popover).text_color(t.muted)
+    return v_flex().size_full().p(18).gap(9).bg(t.popover).text_color(t.muted)
       .track_focus(this.handle)
       .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); this.cancel(); } })
       .child(div().text_size(16).font_semibold().text_color(t.foreground).child(title))
       .when(Boolean(this.promptTarget), (el) => el.child(div().text_size(11).text_color(t.dim).child(this.promptTarget)))
       .child(h_flex().h(38).flex_none().px(10).gap(8).items_center().rounded(9).border_1().border_color(t.accent).bg(t.background)
         .child(Input.new(this.password).flex_1().h_full().text_size(12.8).text_color(t.foreground)))
+      .when(!key, (el) => el.child(h_flex().id("machine-auth-remember").gap(7).items_center()
+        .when(!this.busy, (x) => x.cursor_pointer().on_click((_e, cx) => {
+          cx.stop_propagation();
+          this.remember = !this.remember;
+          setShared("machine-auth.remember", this.remember);
+          cx.notify();
+        }))
+        .when(this.busy, (x) => x.opacity(0.5))
+        .child(div().size(14).rounded(3).border_1().flex().items_center().justify_center()
+          .border_color(this.remember ? t.accent : t.border)
+          .bg(this.remember ? t.accent : t.background)
+          .when(this.remember, (el) => el.child(div().text_size(10).text_color(t.accent_foreground).child("✓"))))
+        .child(div().text_size(11).text_color(t.muted).child("Install my SSH key permanently"))))
       .when(this.error, (el) => el.child(div().text_size(11).text_color(t.blocked).child(this.error)))
-      .when(this.status === "done", (el) => el.child(div().text_size(11).text_color(t.done).child(key ? "Key installed and connected." : "Connected.")))
+      .when(this.status === "done", (el) => el.child(div().text_size(11).text_color(t.done).child(this.message ?? "Connected.")))
       .when(this.busy && !this.error, (el) => el.child(div().text_size(11).text_color(t.dim).child("Waiting for the password prompt…")))
       .child(h_flex().gap(8).items_center()
         .child(div().flex_1())
-        .child(this.button("machine-auth-submit", this.busy ? "Working…" : key ? "Install key and log in" : "Log in", true,
+        .child(this.button("machine-auth-submit", this.busy ? "Working…" : install ? "Log in and install key" : "Log in", true,
           "Send the password to a hidden local terminal.", () => this.submit(cx), this.busy))
         .child(this.button("machine-auth-cancel", "Cancel", false, "Close this panel.", () => this.cancel())))
-      .child(div().text_size(10.5).text_color(t.dim).child("The password goes to a hidden local terminal and is not stored. A successful login closes this panel."));
+      .child(div().text_size(10.5).text_color(t.dim)
+        .child(install ? "The password installs your public key and logs in once. The hidden terminal is removed; nothing is stored." : "The password goes to a hidden local terminal and is not stored. A successful login closes this panel."));
   }
 
   render(cx) {
