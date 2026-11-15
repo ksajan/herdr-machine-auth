@@ -1,27 +1,21 @@
 # Machine auth for Herdr
 
-A slim strip for the **Herdr desktop app** that watches saved SSH machines and
-offers a **Login** button when one needs authentication. Click it and a normal
-local terminal opens inside Herdr running `hc machine login <name>`, so the
-password or MFA prompt appears where you are already working. No more switching
-to an external terminal and copying the command.
+A floating password panel for **Herdr**'s saved SSH machines. When one needs
+authentication, click **Login** (or press `Ctrl+Alt+L`), type the password or
+code, and the login runs in a hidden local terminal. On success the panel closes;
+no terminal tab is left behind.
 
 ![Machine auth](preview.png)
-
-Looking for the machine/space/tab quick switcher? It moved to
-[Herdr Fleet](https://github.com/ksajan/herdr-fleet). This mod is only about
-authentication.
 
 ## Why
 
 Herdr reconnects saved machines in the background, where SSH cannot ask for a
 password or a code. After sleep, a network change, or an expired MFA approval,
 the machine moves to `needs_login` and Herdr shows the CLI command. This mod puts
-the missing button next to the message and offers the permanent key-based fix.
+a proper password panel in front of that, and offers the permanent key-based fix.
 
-It does not store credentials and does not try to answer SSH prompts itself. It
-starts the same `hc machine login` command you would run by hand, in a terminal
-that can ask.
+It does not store credentials. The password goes to a hidden local terminal only
+for the login attempt; the terminal is removed when it finishes or fails.
 
 ## What it does
 
@@ -29,33 +23,29 @@ that can ask.
 - When everything is connected: `Machines ● N connected`.
 - When one needs attention: `Machines ● work needs login` with **Login** and
   **Copy** buttons. A machine that is merely unreachable or asleep gets
-  **Retry** instead. Several machines scroll horizontally.
-- Click **Machines** (or press `Ctrl+Alt+A`) to open the machine auth dialog:
-  every saved machine, its target, state, and **Login / Retry**,
-  **Install key…**, **Copy**. Attention comes first.
-- **Install key…** is the permanent fix: it runs `ssh-copy-id` for your first
+  **Retry** instead.
+- Click **Login** / **Retry** (or press `Ctrl+Alt+L`) to open the password panel:
+  machine, target, one masked input, **Log in**, **Cancel**. On success the panel
+  closes; on failure it stays with the SSH error so you can retry.
+- **Install key…** opens the same panel and runs `ssh-copy-id` for the first of
   `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`, then logs in once. Future
   reconnects use the key and no longer prompt.
-- **Login / Retry** opens a local space named `<machine> login` and runs
-  `hc machine login <machine>`. A successful login closes its tab after a
-  second. A failed login stays until you press Enter, then closes the tab too.
-- **Copy** copies `hc machine login <machine>` for use in your own terminal.
-- Posts a clickable notification when a machine enters `needs_login`. Clicking
-  it does the same as **Login**. It repeats after 10 minutes while the machine
-  still needs a login, so a dismissed toast is not the end of the story.
+- Click **Machines** (or press `Ctrl+Alt+A`) for the auth dialog: every saved
+  machine, its target, state, **Login / Retry**, **Install key…**, **Copy**.
+- Posts a clickable notification when a machine enters `needs_login`; clicking it
+  opens the password panel directly. It repeats after 10 minutes while the
+  machine still needs a login.
 - Refreshes every 5 seconds; the ↻ button checks immediately.
 
 ## Shortcuts
 
 - `Ctrl+Alt+A` — open the auth dialog.
-- `Ctrl+Alt+L` — log in to the first machine that needs it.
-- `Ctrl+Alt+K` — install an SSH key on the first machine that needs one, then
-  log in. Only `needs_login` machines with a standard target and a default key
-  are eligible.
+- `Ctrl+Alt+L` — open the password panel for the first machine needing login.
+- `Ctrl+Alt+K` — open the install-key panel for the first eligible machine.
 
 Herdr's `Ctrl+Shift+P` palette lists **app commands only**; a mod's own actions
-are not added to it. These direct keys are the quick route. The auth dialog's
-**Install key…** button does the same for a machine you pick.
+are not added to it. These direct keys are the quick route. The dialog buttons
+remain the discoverable route.
 
 ## Install
 
@@ -73,7 +63,7 @@ cp -R mods/machine-auth ~/.config/herdr-app/mods/
 herdr-app check ~/.config/herdr-app/mods/machine-auth
 ```
 
-Merge its keys too, or add the one line yourself:
+Merge its keys too, or add the lines yourself:
 
 ```json
 {
@@ -100,49 +90,39 @@ you use several layouts, add this block to each one:
 Once the gallery has indexed the repo, the short link is
 `herdr.dev/mods/ksajan/herdr-machine-auth`.
 
-Requires the Herdr desktop app and `hc` (herdr-core) on `PATH`. Linux and macOS.
-On Windows, `hc machine login` has no password prompt, so this mod's Login
-button is not useful there.
-
-## Use
-
-- Click **Login**. Type the password or code when the terminal asks.
-- After a successful login, Herdr rechecks the machine within about 30 seconds;
-  the strip updates by itself.
-- If you already have a terminal open, **Copy** gives you the command.
-- If the machine is connected but you want to force a fresh check, click ↻.
+Requires the Herdr desktop app, `hc` (herdr-core), and `herdr-app` on `PATH`.
+Linux and macOS. On Windows, `hc machine login` has no password prompt, so this
+mod's login panel is not useful there.
 
 ## What it runs and reads
 
-- Runs `hc machine ls --json` locally every 5 seconds. No network requests from
-  the mod.
-- Runs `hc machine login <name>` in a normal terminal when you click Login. A successful login closes its tab; a failed one waits for Enter, then closes it.
-- The optional **Install key…** action runs `ssh-copy-id`, which reads one
-  public key (the first of `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`) and
-  appends it to the machine's `authorized_keys`. It reads no private key and
-  does not handle the password; SSH asks in the terminal.
+- Runs `hc machine ls --json` locally every 5 seconds.
+- Starts the login in a hidden terminal with `hc run --bg`; no pane or tab is
+  created.
+- Waits for the SSH prompt, sends the password with `hc send --force`, reads the
+  result with `hc get`/`hc read`, and removes the hidden terminal.
+- The optional **Install key…** action runs `ssh-copy-id`, which reads one public
+  key (the first of `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`) and appends it
+  to the machine's `authorized_keys`. It reads no private key.
 - Posts notifications through Herdr's `notify`.
 - Stores no credentials.
 
 ## Limits
 
+- The hidden login handles one password/passphrase/code prompt. A machine that
+  asks for a second factor after the password may need the command from
+  **Copy** in a terminal.
 - The strip only runs while its block is in the shown layout. Add the block to
   every layout you use.
 - It watches **herdr-core** machines (`hc machine ls`), which is what the app's
   sidebar and spaces use. Machines saved only in the `herdr` TUI are a separate
   catalog; use `herdr machine reconnect` for those.
-- The notification action uses `space.new`, so it works with Herdr's shipped
-  toast and with custom toasts that run notification actions.
-- A machine that is merely unreachable gets **Retry**. It will try
-  authentication and then show the actual SSH error in the terminal.
-- **Install key…** only appears for `needs_login` machines with a standard
-  target (`via: false`) and only uses the first of the two default public keys.
-  For a custom port, a Host alias that `ssh-copy-id` cannot parse, or a
-  different key, run `ssh-copy-id` once in your own terminal.
-- The mod quotes machine names for the `sh -c` wrapper; names from `hc` are
-  already constrained, but the quoting keeps a renamed machine safe.
-- `Ctrl+Alt+A` is the default auth-dialog shortcut. Change or remove it in
-  `keys.json` if it conflicts with something you use.
+- **Install key…** only appears for `needs_login` machines with a standard target
+  (`via: false`) and uses the first of the two default public keys.
+- The password is held in memory until it is sent, then cleared. The hidden
+  terminal is removed after the attempt; it is not a pane and leaves no tab.
+- `Ctrl+Alt+A`, `Ctrl+Alt+K`, and `Ctrl+Alt+L` can be changed in `keys.json`.
+- Herdr's palette can't list mod actions; the direct keys are the shortcut.
 
 ## Uninstall
 
@@ -152,9 +132,9 @@ Remove the block from your layouts, or delete the folder:
 rm -rf ~/.config/herdr-app/mods/machine-auth
 ```
 
-Then switch layouts or restart Herdr. Remove the `ctrl-alt-a` line from
-`keys.json` too. Saved machines and their SSH auth are untouched. If you used
-**Install key…**, the public key stays in the machine's
+Then switch layouts or restart Herdr. Remove the `ctrl-alt-a`, `ctrl-alt-k`, and
+`ctrl-alt-l` lines from `keys.json` too. Saved machines and their SSH auth are
+untouched. If you used **Install key…**, the public key stays in the machine's
 `~/.ssh/authorized_keys`; remove it there if you want to undo that separately.
 
 ## License

@@ -1,277 +1,162 @@
 # Machine auth
 
-A slim bottom strip for the Herdr desktop app that watches saved SSH machines.
-When one needs authentication it shows a **Login** button; clicking it opens a
-normal local terminal inside Herdr and runs `hc machine login <machine>`, so the
-password or code prompt appears where the person already is. The **Machines**
-label opens a compact auth dialog with the same actions, and a clickable
-notification does the same as Login. It stores no credentials and never tries to
-answer SSH itself.
+A floating password panel for the Herdr desktop app's saved SSH machines. When a
+machine needs authentication, the strip's **Login** / **Retry** button — or
+`Ctrl+Alt+L` — opens a dialog with one masked input. The login runs in a hidden
+local terminal, so no pane or tab appears; on success the panel closes, on failure
+it stays with the SSH error. It also offers a permanent **Install key** flow and
+a clickable `needs_login` notification.
 
 ![Machine auth](preview.png)
 
 ## What you see
 
-A 34px strip across the bottom of the window, on Herdr's `chrome` background:
+A 34px strip across the bottom of the window, on `chrome`:
 
 - **Machines**, 12px medium in `foreground`; clicking it opens the auth dialog.
-- While the first read runs: `checking…`, 11px `dim`.
-- When every machine is connected: a 6px `ansi2` dot and `N connected`, 11px
-  `dim`. With no machines: a `dim` dot and `none added`.
-- When one or more need attention: rows left to right, scrolling horizontally.
-  Each row has a 6px dot (`blocked` for `needs_login`, `dim` otherwise), the
-  machine name in `foreground` (up to 140px, truncated), the state in 11px
-  (`blocked` for `needs_login`, otherwise `dim`), a **Login** button, a **Copy**
-  button and a 1×16px `border` divider.
-  - Login / Retry: 26px high, 9px horizontal padding, radius 5, `solid`
-    background, `solid_foreground` text, 11px medium. It reads `Login` for
-    `needs_login` and `Retry` for every other non-connected state. Hover dims it
-    to 0.88; its tooltip names the target, state, `why` when `hc` gives one, and
-    the exact command.
-  - Copy: same size, radius 5, `raised` background, `foreground` text. After a
-    copy it reads `Copied` until another copy.
-- A refresh button at the far right: 24×24px, radius 5, `↻`, `hover`
-  background and `foreground` text on hover.
-- If the check fails, the middle is one truncated line in `blocked`:
-  `Couldn't check machines: <error>`; its tooltip has the full error.
+- `checking…` while the first read runs.
+- `N connected` with a 6px `ansi2` dot when all are connected; `none added` when
+  there are no machines.
+- Attention rows, scrolling horizontally: 6px dot (`blocked` for
+  `needs_login`), machine name (up to 140px), state (11px), **Login** / **Retry**,
+  **Copy**, 1×16px divider. The Login/Retry tooltip names the target, state,
+  `why`, and the command.
+- A 24×24px refresh `↻` at the right.
+- Errors replace the middle with one truncated `blocked` line; its tooltip has
+  the full message.
 
-Clicking **Machines** (or pressing `Ctrl+Alt+A`) opens a 640×460 dialog on
-`popover`:
+`Machines` / `Ctrl+Alt+A` opens a 640×460 dialog on `popover`:
 
-- Header: **Machine auth** 17px semibold in `foreground`; `${connected}
-  connected` and `${attention} need attention` in 12px `dim`; a 24×24px
-  refresh `↻`; a 24×24px `×` that closes the dialog.
-- A scrollable column of machine cards, attention first and connected after.
-  Each card is a 10px-padded `surface` rounded 8 with a `border`:
-  - a 7px state dot (`blocked` for `needs_login`, `ansi2` for connected,
-    `dim` otherwise), the name 13px medium in `foreground`, the state 11px in
-    `blocked` for `needs_login` else `dim`, then the actions at the right:
-    **Login / Retry** (non-connected only), **Install key…** (only
-    `needs_login`, a target, and `via: false`), and **Copy**;
-  - an 11px `dim` target line, with the `why` reason appended when `hc` gives
-    one.
-- Footer, 11px `dim`: `Login opens hc machine login in a local terminal.
-  Install key reads only public keys and writes authorized_keys; no credentials
-  are stored.`
+- Header **Machine auth** 17px semibold, connected/attention counts, refresh, ×.
+- Attention-first cards on `surface`, rounded 8, with a border: state dot, name
+  13px medium, state, **Login / Retry**, **Install key…** (needs_login, target,
+  `via: false`), **Copy**, and a target line with `why`.
+- Footer: shortcut hints and "Passwords go to a hidden local terminal; nothing
+  is stored."
 
-The preview uses a synthetic `build-box` machine; the running mod reads the real
-`hc machine ls`.
+**Login / Retry / Install key** opens a 440×280 password panel on `popover`:
+
+- Title `Log in to <machine>` or `Install key on <machine>`.
+- Target line, 11px `dim`.
+- A 38px masked input with `accent` border, `Password or code` placeholder,
+  auto-focused.
+- **Log in** / **Install key and log in** primary button and **Cancel**.
+- Status: `Waiting for the password prompt…`, the SSH error in `blocked`, or the
+  success line in `done`.
+- A note: "The password goes to a hidden local terminal and is not stored. A
+  successful login closes this panel."
+
+A notification says `<machine> needs a login`, body "Click here to open the
+password panel.", level `error`. Clicking it opens the panel for that machine.
 
 ## How it behaves
 
-- Every 5 seconds it runs `hc machine ls --json`. The first read starts at
-  init. The refresh button starts another read immediately. The strip copy and
-  an open dialog copy each poll; the dialog copy does not post notifications.
-- Temporary machines (`temporary: true`) are left out.
-- **Machines** opens the dialog with `openOverlay({ mod: "machine-auth", kind:
-  "dialog", width: 640, height: 460 })`. The mod's `keys.json` binds
-  `ctrl-alt-a` to `mod.open:machine-auth`; `mod.json` carries the same 640×460
-  dialog as its default overlay.
-- When a machine enters `needs_login`, it posts one notification:
-  title `<name> needs a login`, body `Click here to log in in a terminal.`,
-  level `error`, action `space.new` with the login arguments below. The action
-  is an ordinary app command, so Herdr's shipped toast and any custom toast that
-  runs actions can use it. While the machine stays in `needs_login`, the notice
-  repeats after 10 minutes; when it leaves that state the record is cleared.
-- `Ctrl+Alt+A` opens the dialog. `Ctrl+Alt+L` logs in to the first
-  `needs_login` machine; `Ctrl+Alt+K` installs a key on the first
-  `needs_login` machine with a target and `via: false`. The keys deliver
-  `machine-auth.login` and `machine-auth.install-key` to `nextCommand()`;
-  there are no arguments, so the mod picks the first attention machine. If
-  there is nothing to do, it posts an info notification.
-- **Login / Retry** calls `run("space.new", ...)` to make a **local** space
-  (machine `""`) named `<machine> login`, with a tab named `login`. A success
-  closes its tab after a second; a failure waits for Enter, then closes the tab.
-  The app's launch wrapper starts an interactive shell after `sh -c`, so the
-  command itself closes the tab:
-
-  ```sh
-  close_tab() {
-    [ -n "${HC_TERMINAL_ID:-}" ] || return 0
-    tab=$(hc get "$HC_TERMINAL_ID" --json 2>/dev/null | grep -o '"herdr.tab":"[^"]*"' | cut -d'"' -f4)
-    [ -n "$tab" ] || return 0
-    app=$(command -v herdr-app 2>/dev/null || printf "%s" "$HOME/.local/bin/herdr-app")
-    "$app" do tab.close --id "$tab" --confirmed true >/dev/null 2>&1 || true
-  }
-  hc machine login <machine>; code=$?
-  if [ "$code" -eq 0 ]; then
-    printf '\nLogged in. Closing…\n'
-    sleep 1
-  else
-    printf '\nLogin exited %s. Press Enter to close.\n' "$code"
-    read _
-  fi
-  close_tab
-  ```
-
-  The space is local even when the selected space is on another machine, so the
-  login terminal is always available.
-- **Install key…** is the permanent fix. It opens a local space named
-  `<machine> key` with a `key` tab and this shell, then closes the dialog:
-
-  ```sh
-  # Same close_tab helper as the login command.
-  key=$(ls "$HOME"/.ssh/id_ed25519.pub "$HOME"/.ssh/id_rsa.pub 2>/dev/null | head -n 1)
-  status=1
-  if [ -z "$key" ]; then
-    echo "No public key found in ~/.ssh (looked for id_ed25519.pub and id_rsa.pub)."
-  elif ! command -v ssh-copy-id >/dev/null 2>&1; then
-    echo "ssh-copy-id is not installed."
-  elif ssh-copy-id -i "$key" <target>; then
-    hc machine login <machine>
-    status=$?
-  else
-    status=$?
-    echo "ssh-copy-id did not finish; nothing was changed."
-  fi
-  if [ "$status" -eq 0 ]; then
-    printf '\nKey installed and logged in. Closing…\n'
-    sleep 1
-  else
-    printf '\nInstall key exited %s. Press Enter to close.\n' "$status"
-    read _
-  fi
-  close_tab
-  ```
-
-  The first existing default public key is installed, then the machine is
-  logged in once. A success closes its tab; a failure waits for Enter, then
-  closes it. No private key or password is read by the mod; SSH asks for the
-  password itself.
-- **Copy** writes `hc machine login <machine>` to the clipboard. It is the same
-  command the shipped Spaces mod offers; this mod adds the button.
-- The strip does not change the layout or switch machines. The dialog only
-  closes; it does not select a machine.
-- No credentials are read, written or cached. The terminal asks; SSH owns the
-  prompt.
+- `refresh` runs `hc machine ls --json` every 5s and filters temporary machines.
+  The strip copy notifies; the dialog copy does not.
+- On `needs_login`, `notifyLogins` stores the machine in
+  `setShared("machine-auth.pending", name)` and posts a notification whose action
+  is the mod command `machine-auth.prompt`. The nextCommand loop reads the shared
+  name and opens the password panel.
+- The panel's `submit` trims nothing (passwords may contain spaces): a non-empty
+  value is stored in `pendingPassword`, the input is cleared immediately, and
+  `startHidden` runs.
+- `startHidden` starts a hidden PTY terminal:
+  - login: `hc run --bg --json --name auth-<base36-time> -- hc machine login <machine>`
+  - key: `hc run --bg --json --name ... -- sh -c <keyLine>`, where `keyLine` picks
+    the first default public key, runs `ssh-copy-id`, then `hc machine login`.
+  The returned address is kept; the terminal is not attached to a pane.
+- `pollPrompt` checks `hc get` for a finished terminal, then `hc read` for a
+  prompt (`password`, `passphrase`, `passcode`, `verification`, `authenticator`).
+  When it appears it sends `pendingPassword` with `hc send --force`, clears the
+  field, and starts `watch`.
+- `watch` checks `hc get` for finish and `hc read` for
+  `permission denied` / `authentication failed` / `incorrect` / `try again` or a
+  second `passcode`/`verification` prompt. It times out after about 30s.
+- `finish` reads the output, removes the hidden terminal with `hc rm`, then:
+  success → `done`, close the panel after 700ms; failure → `error` with the last
+  three non-empty output lines and keep the panel for a retry.
+- `fail` kills and removes the hidden terminal, sets the error, and keeps the
+  panel. `cancel` / Esc does the same and closes.
+- **Copy** writes `hc machine login <machine>`; it is the fallback for multi-step
+  MFA.
+- `Ctrl+Alt+L` opens the panel for the first `needs_login` machine.
+  `Ctrl+Alt+K` does so in install-key mode for the first eligible machine.
+  With nothing to do, each posts an info notification.
 
 ## Built from
 
 - One mod, `mods/machine-auth/`:
   - `mod.json`: `{ "place": "bottom", "size": 34, "title": "Machine auth",
-    "version": "0.7.0", "overlay": { "kind": "dialog", "width": 640,
-    "height": 460 } }`. The first time Herdr sees the folder it docks the strip
-    into the shown layout; the overlay is what `mod.open` uses for the dialog.
-  - `keys.json`: `ctrl-alt-a` opens the dialog, `ctrl-alt-l` logs in to the
-    first machine needing it, and `ctrl-alt-k` installs its key.
-  - `main.js`: imports `View`, `div` from `gpui-kit`, `v_flex`, `h_flex` from
-    `gpui-base`, and `hc`, `notify`, `run`, `theme`, `props`, `openOverlay`,
-    `closeOverlay`, `nextCommand` from `herdr`.
-    - `shellArg(value)` leaves plain machine names alone and single-quotes
-      anything else, escaping embedded single quotes.
-    - `commandFor(machine)` returns `hc machine login <quoted>`.
-    - `loginArgs(machine)` returns the `space.new` arguments above.
-    - `keyArgs(machine, target)` builds the optional `ssh-copy-id` shell above.
-    - `closeTab()` builds the shell helper that reads `HC_TERMINAL_ID`, gets
-      `herdr.tab` from `hc get`, and closes that tab with `herdr-app do
-      tab.close --confirmed true`.
-    - `init` sets `this.overlay = props()?.overlay`, empty/loading state, a
-      5-second `cx.timer.every`, starts the first read, and runs a
-      `nextCommand()` loop for `install-key` / `login`.
-    - `installKeyShortcut` and `loginShortcut` pick the first attention machine
-      and run `keyArgs` / `loginArgs`; an empty case posts an info notification.
-    - `refresh` uses `cx.spawn(async (cx) => ...)`, checks `r.code`, parses
-      `r.stdout` as JSON, filters temporary machines, calls `notifyLogins` only
-      on the strip copy, and sets `loading`/`error` before `cx.notify()`.
-    - `notifyLogins` keeps `this.notified` as a per-machine timestamp and posts
-      at most one notice per 10 minutes for a machine in `needs_login`.
-    - `openList` calls `openOverlay` with the same 640×460 dialog; `close` tries
-      the overlay id, falls back to `closeOverlay()`, and swallows errors.
-    - `button(id, label, primary, tooltip, onClick)` is the shared 26px action
-      button; it stops propagation with `cx.stop_propagation()`.
-    - `row` draws the strip's dot, name, state, Login/Retry, Copy and divider.
-    - `renderStrip` chooses checking / error / all-connected / attention, makes
-      **Machines** open the dialog, and always draws the refresh button.
-    - `authCard` draws one dialog card: state dot, name, state, Login/Retry,
-      Install key…, Copy and target.
-    - `renderList` draws the dialog header, the scrollable cards and the footer.
-    - `render(cx)` returns `renderList` when `this.overlay` is set, otherwise
-      `renderStrip`.
-- No images, fonts, SVGs or other assets. No network requests.
-  `hc machine ls` runs on a timer; the login and key actions run only after a
-  click, in a normal terminal. **Install key…** runs `ssh-copy-id`, which reads
-  the chosen public key and writes `authorized_keys`; no private key or password
-  is read by the mod.
+    "version": "0.8.0", "overlay": { "kind": "dialog", "width": 640,
+    "height": 460 } }`. The strip docks on first sight; the overlay is the auth
+    dialog. The password panel is opened with `openOverlay` and its own
+    440×280 props.
+  - `keys.json`: `ctrl-alt-a` opens the dialog, `ctrl-alt-l` opens the first
+    login panel, `ctrl-alt-k` opens the first install-key panel.
+  - `main.js`: imports `View`, `div` from `gpui-kit`, `v_flex`, `h_flex`,
+    `InputState`, `Input` from `gpui-base`, and `hc`, `notify`, `theme`, `props`,
+    `openOverlay`, `closeOverlay`, `nextCommand`, `setShared`, `shared` from
+    `herdr`.
+    - `shellArg` / `commandFor` quote the machine for Copy and tooltips.
+    - `keyLine(machine, target)` is the hidden `ssh-copy-id` + login shell.
+    - `init` reads `props().prompt` / `target` / `action`; the prompt copy creates
+      the masked `InputState` and focuses it. The strip/list copy starts the
+      `nextCommand()` loop and the 5s refresh.
+    - `refresh`, `notifyLogins`, `openList`, `openPrompt`, `installKeyShortcut`,
+      `loginShortcut`, `close` manage the machine state and entries.
+    - `button`, `renderStrip`, `stripRow`, `authCard`, `renderList` draw the
+      strip and auth dialog.
+    - `submit`, `startHidden`, `pollPrompt`, `watch`, `finish`, `fail`, `cancel`
+      implement the hidden login and panel lifecycle.
+    - `renderPrompt` draws the 440×280 panel; `render` chooses prompt / dialog /
+      strip.
+- No images, fonts or other assets. No network requests.
+  `hc run` starts the hidden PTY; `hc send` supplies the password; `hc get` /
+  `hc read` detect the prompt and result; `hc rm` removes the hidden terminal.
 
 ## Watch out
 
-- **`hc` must be on `PATH`** in the app's environment. Herdr installs it; a
-  custom setup that only has `herdr-core` needs a symlink or a different command.
-  If `hc` fails, the strip shows `Couldn't check machines: ...`.
-- **This watches herdr-core's machine catalog**, the one the app's spaces and
-  sidebar use (`hc machine ls`). Machines saved only in the `herdr` TUI are a
-  separate catalog; use `herdr machine reconnect` for those.
-- **The login wrapper assumes a POSIX shell.** `sh -c` and `read _` work on
-  Linux and macOS. On Windows `hc machine login` has no password prompt, so the
-  button is not useful there. Do not replace `sh` with the user's interactive
-  shell: fish and nushell parse the wrapper differently.
-- **The space is deliberately local.** Passing the machine being viewed would
-  put the login terminal on the broken machine. `machine: ""` is this computer.
-- **The notification action is `space.new`**, not a mod command. Mod commands
-  receive no args through `notify`; using `space.new` keeps the action working
-  with the shipped toast and with custom toasts that call `run(action.name,
-  action.args)`.
-- **Only one copy per layout.** The strip polls while its block is shown. If the
-  person uses several layouts, add the block to each one; a layout without it has
-  no strip and no notifications. The dialog copy polls while open but does not
-  notify.
-- **Do not filter out unknown states.** A machine can be `unreachable` or
-  `asleep` and still need a login attempt; showing Login/Retry for every
-  non-connected state is the safe behavior.
-- **Do not auto-run the login or the key install.** Starting SSH without a click
-  would put a credential prompt on screen at arbitrary times. Both actions open
-  a terminal only after a click, refresh, or notification action.
-- **Install key… is deliberately conservative.** It only appears for
-  `needs_login`, a target, and `via: false`. It uses the first of
-  `~/.ssh/id_ed25519.pub` and `~/.ssh/id_rsa.pub`, never a private key. A custom
-  port, a Host alias `ssh-copy-id` cannot parse, a different key, or
-  `ssh-copy-id` not being installed are left to the person's own terminal; the
-  key terminal prints the reason and stays open.
-- **The 10-minute repeat is intentional.** A dismissed notification should not
-  hide a machine that still needs a person forever; a successful login clears
-  the state and the timer.
-- **The refresh button does not clear `notified`.** If a machine is still in
-  `needs_login`, a manual refresh must not spam a new toast.
-- **Machine names may contain punctuation.** Always pass them through
-  `shellArg`. Never interpolate an unquoted name into a shell line.
-- **`ctrl-alt-a` may be taken.** The mod ships it in `keys.json`; the person can
-  change or drop it. The Machines label still opens the dialog. The same applies
-  to `ctrl-alt-l` and `ctrl-alt-k`.
-- **The `Ctrl+Shift+P` palette lists app commands only.** Herdr does not list a
-  mod's own `<mod>.<command>` actions there. The direct keys are the quick route;
-  the dialog's buttons remain the discoverable route.
-- **Auto-close needs `HC_TERMINAL_ID` and `herdr-app`.** App-created terminals
-  have the id. A terminal without it (or a missing `herdr-app`) falls back to
-  leaving the tab open; the login itself still works.
-- **Do not call `hc get` without the terminal id.** The helper must no-op when
-  `HC_TERMINAL_ID` is empty rather than inspecting `t1`.
+- **`hc` and `herdr-app` must be on `PATH`.** `hc run` needs the core; removing
+  the hidden terminal uses `hc rm`.
+- **This is not a terminal fallback.** A machine that asks for a second factor
+  after the password will fail with the one-time-code message. Use **Copy** and
+  run `hc machine login <machine>` in a terminal for multi-step MFA.
+- **The hidden terminal still exists briefly.** It has a PTY, but no pane/tab.
+  Remove it on success, failure, timeout, and cancel. Do not leave `auth-*`
+  terminals in `hc ls`.
+- **The password is sensitive.** Keep it only in `pendingPassword` until `hc
+  send`; clear the input immediately; never write it to disk, a log, a label, or
+  a notification. The hidden terminal's scrollback is removed with it.
+- **Prompt detection is heuristic.** Match password/passphrase/passcode/
+  verification/authenticator; if none appears within about 12s, fail instead of
+  hanging. `ssh` disables echo for the password, but do not assume every program
+  will.
+- **Start the terminal without `--rm`** so `hc get`/`hc read` can inspect it;
+  remove it explicitly with `hc rm` after reading.
+- **`hc run` names are unique and short.** `auth-<base36-time>` is under 32
+  chars and uses only lowercase/digits.
+- **Use `hc send --force`.** The hidden terminal may be seen as blocked while
+  waiting for a password; `--force` is what lets the panel answer it.
+- **Do not put the password on a command line.** It goes through `hc send` to
+  the PTY, never through a shell argument or a file.
+- **The palette does not list mod actions.** `Ctrl+Shift+P` is app commands only;
+  the direct keys and dialog buttons are the route.
+- **`Ctrl+Alt+A/K/L` may be taken.** They are in `keys.json`; the person can
+  change or drop them. The Machines label still opens the dialog.
 
 ## Done when
 
 - `herdr-app check ~/.config/herdr-app/mods/machine-auth` passes.
-- With all machines connected, the strip reads `Machines ● N connected` and the
-  ↻ button triggers a fresh read without changing the layout.
-- Temporarily forcing one machine to `{ state: "needs_login", target:
-  "you@build-box.local", via: false }` shows `Machines ● build-box needs login`
-  with **Login** and **Copy**, and posts one notification whose click would run
-  the same login.
-- Clicking **Machines** (or pressing `Ctrl+Alt+A`) opens the 640×460 dialog.
-  Attention is first; the needs-login card shows **Login**, **Install key…** and
-  **Copy**; connected cards show **Copy** only.
-- Clicking **Login** creates a local space named `build-box login` with a
-  `login` tab, and the terminal shows the `(user@host) Password:` prompt (or the
-  real SSH error). A successful login closes the tab after a second; a failed
-  one waits for Enter, then closes it. No leftover login tabs.
-- `Ctrl+Alt+L` logs in to the first machine that needs it; `Ctrl+Alt+K` installs
-  its key. With nothing to do, each posts an info notification instead of opening
-  a terminal.
-- Clicking **Install key…** creates a local space named `build-box key` with a
-  `key` tab, prompts for the password, runs `ssh-copy-id`, then logs in once
-  with `hc machine login`. It reads only the first default public key and keeps
-  the terminal open on failure.
-- **Copy** puts `hc machine login build-box` on the clipboard and briefly reads
-  `Copied`.
-- A successful `hc machine login work` changes the strip back to `connected`
-  within one poll or one manual refresh.
-- Removing the block from the layout removes the strip; deleting the mod folder
-  and the `ctrl-alt-a` key leaves layouts, machines and SSH auth untouched.
+- With all machines connected, the strip reads `Machines ● N connected`; ↻
+  refreshes without changing the layout.
+- Temporarily forcing `work` to `needs_login` and pressing `Ctrl+Alt+L` opens the
+  440×280 password panel. A successful submit (key auth) closes the panel, leaves
+  no `auth-*` terminal, and switches the strip back to connected.
+- A wrong password keeps the panel open with a readable SSH error and removes the
+  hidden terminal.
+- **Install key…** runs `ssh-copy-id`, logs in once, closes the panel on success,
+  and leaves no visible tab.
+- **Copy** puts `hc machine login <machine>` on the clipboard.
+- The notification's action opens the password panel for that machine.
+- Removing the block and mod folder leaves layouts, machines and SSH auth
+  untouched.
